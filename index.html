@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rhinebeck Village Sidewalk Survey</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #1a1a1a; }
+  header { padding: 10px 14px; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  header p { margin: 0; color: #555; font-size: 13px; }
+  #stats { font-size: 13px; color: #333; }
+  #stats b { margin-left: 8px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+  #main { display: flex; height: calc(100vh - 57px); }
+  #map { flex: 1; min-width: 0; }
+  #panel { width: 320px; border-left: 1px solid #ddd; padding: 14px; overflow-y: auto; background: #fff; }
+  #panel h2 { font-size: 16px; margin: 0 0 8px; }
+  #panel .meta { font-size: 13px; color: #555; margin-bottom: 12px; }
+  #panel label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+  #panel select, #panel textarea, #panel input[type="text"] { width: 100%; padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
+  #panel textarea { min-height: 70px; resize: vertical; }
+  .btn { display: inline-block; padding: 8px 14px; font-size: 14px; border: 0; border-radius: 6px; cursor: pointer; background: #1a6b3c; color: #fff; margin-top: 12px; }
+  .btn.secondary { background: #eee; color: #222; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  #saveStatus { font-size: 13px; margin-top: 8px; min-height: 18px; }
+  #saveStatus.ok { color: #1a6b3c; }
+  #saveStatus.warn { color: #9a6a00; }
+  #saveStatus.err { color: #b00020; }
+  #filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  #filters button { padding: 5px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 20px; background: #fff; cursor: pointer; }
+  #filters button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  #searchRow { display: flex; gap: 6px; margin: 10px 0; }
+  #searchRow input { flex: 1; }
+  #searchRow button { padding: 8px 10px; }
+  #banner { display: none; background: #fff3cd; border: 1px solid #e6c200; padding: 10px 14px; font-size: 13px; }
+  #banner code { background: #fff; padding: 1px 4px; border-radius: 3px; }
+  #loading { padding: 10px 14px; font-size: 13px; color: #555; }
+  @media (max-width: 760px) {
+    #main { flex-direction: column; }
+    #map { height: 55vh; }
+    #panel { width: 100%; border-left: 0; border-top: 1px solid #ddd; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Rhinebeck Village Sidewalk Survey</h1>
+    <p>Tap a parcel on the map to assess its sidewalk.</p>
+  </div>
+  <div id="stats"></div>
+</header>
+<div id="banner"></div>
+<div id="loading">Loading parcels…</div>
+<div id="main">
+  <div id="map"></div>
+  <aside id="panel">
+    <div id="filters">
+      <button data-filter="all" class="active">All parcels</button>
+      <button data-filter="assessed">Assessed</button>
+      <button data-filter="unassessed">Not assessed</button>
+    </div>
+    <div id="searchRow">
+      <input type="text" id="searchInput" placeholder="Search address or parcel ID, e.g. 2 Mill Rd">
+      <button class="btn secondary" id="searchBtn" type="button">Go</button>
+    </div>
+    <button class="btn secondary" id="exportBtn" type="button">Export assessments (CSV)</button>
+    <hr>
+    <div id="parcelPanel">
+      <p style="color:#555; font-size:14px;">Select a parcel on the map to assess its sidewalk.</p>
+    </div>
+  </aside>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
