@@ -15,25 +15,28 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 27;
+  var APP_VERSION = 32;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
   // Condition is a 1-4 score: 1 = Damaged (worst) through 4 = Excellent
   // (best). Map colors run red (1) to green (4).
   var CONDITION_COLORS = {
+    0: "#9ca3af",
     1: "#d73027",
     2: "#fdae61",
     3: "#a6d96a",
     4: "#2ca25f"
   };
   var CONDITION_LABELS = {
+    0: "No Sidewalk",
     1: "Damaged",
     2: "Deficient",
     3: "Good",
     4: "Excellent"
   };
   var CONDITION_TEXT_COLORS = {
+    0: "#ffffff",
     1: "#ffffff",
     2: "#ffffff",
     3: "#1a1a1a",
@@ -73,7 +76,7 @@
     // NOTE: line-cap and line-join are LAYOUT properties in MapLibre, not
     // paint. Putting them in paint fails style validation and the whole
     // layer is rejected (this was the missing-lines bug).
-    map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
+    map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"], "line-dasharray": ["get", "lineDash"] } });
     // Invisible wide hit layer for easier tapping (does not affect visual line width).
     map.addLayer({ id: "segments-hit", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#000", "line-opacity": 0, "line-width": 24 } });
     map.on("mouseenter", "segments-hit", function () { map.getCanvas().style.cursor = "pointer"; });
@@ -367,11 +370,15 @@
   }
 
   // Segment lines: condition color when assessed, gray when not.
+  // Condition 0 (No Sidewalk) renders as a dashed gray line.
   function segmentStyleFor(feature) {
     var a = segAssessments[feature.properties.id];
     var isSelected = feature.properties.id === selectedSegmentId;
     if (a && CONDITION_COLORS[a.condition]) {
-      return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4 };
+      if (a.condition === 0) {
+        return { color: CONDITION_COLORS[0], width: isSelected ? 5 : 2.5, dash: [4, 4] };
+      }
+      return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4, dash: null };
     }
     return { color: "#6b7280", width: isSelected ? 5 : 2.5 };
   }
@@ -384,7 +391,7 @@
   }
 
   function renderStats() {
-    var counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    var counts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
     var assessed = 0;
     Object.keys(segAssessments).forEach(function (id) {
       var c = segAssessments[id].condition;
@@ -400,6 +407,12 @@
         CONDITION_LABELS[c] + ": <b>" + counts[c] + "</b></span>"
       );
     });
+    if (counts[0] > 0) {
+      parts.push(
+        '<span><span class="dot" style="background:' + CONDITION_COLORS[0] + '"></span>' +
+        "No Sidewalk: <b>" + counts[0] + "</b></span>"
+      );
+    }
     statsEl.innerHTML = parts.join('<span class="statDiv"></span>');
   }
 
@@ -441,7 +454,8 @@
         .filter(function (f) { return showUnassessed || segAssessments[f.properties.id]; })
         .map(function (f) {
           var s = segmentStyleFor(f);
-          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width });
+          // Use [1,0] for solid (empty array can fail validation); [4,4] for dashed.
+          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width, lineDash: s.dash || [1, 0] });
           return { type: "Feature", properties: props, geometry: f.geometry };
         });
       map.getSource("segments").setData({ type: "FeatureCollection", features: segFeats });
@@ -508,9 +522,14 @@
     var segs = segmentsByParcel[grid] || [];
     var listHtml = segs.length ? segs.map(function (s) {
       var sa = segAssessments[s.properties.id];
-      var status = (sa && CONDITION_COLORS[sa.condition])
-        ? '<span class="segDot" style="background:' + CONDITION_COLORS[sa.condition] + '"></span>Condition ' + sa.condition
-        : '<span class="segDot" style="background:#4b5563"></span>Not Assessed';
+      var status;
+      if (sa && sa.condition === 0) {
+        status = '<span class="segDot" style="background:' + CONDITION_COLORS[0] + '"></span>No Sidewalk';
+      } else if (sa && CONDITION_COLORS[sa.condition]) {
+        status = '<span class="segDot" style="background:' + CONDITION_COLORS[sa.condition] + '"></span>Condition ' + sa.condition;
+      } else {
+        status = '<span class="segDot" style="background:#4b5563"></span>Not Assessed';
+      }
       return '<button type="button" class="segRow" data-segment="' + s.properties.id + '"><span>' + escapeHtml(s.properties.street_name) + "</span><span>" + status + "</span></button>";
     }).join("") : '<p class="segEmpty">No sidewalk segments — this parcel does not front a street in the county roads data.</p>';
     panelEl.innerHTML =
@@ -554,8 +573,9 @@
       "<br>Parcel: " + escapeHtml((parcelProps && parcelProps.printkey) || grid) + "</div>" +
       '<label>Condition</label>' +
       '<div class="condRow">' +
-      [4, 3, 2, 1].map(function (n) {
-        return '<div class="condItem"><button type="button" class="condBox' + (String(a.condition) === String(n) ? " selected" : "") + '" data-condition="' + n + '" style="background:' + CONDITION_COLORS[n] + ';color:' + CONDITION_TEXT_COLORS[n] + '">' + n + "</button><span class=\"condLabel\">" + CONDITION_LABELS[n] + "</span></div>";
+      [4, 3, 2, 1, 0].map(function (n) {
+        var label = n === 0 ? "—" : n;
+        return '<div class="condItem"><button type="button" class="condBox' + (String(a.condition) === String(n) ? " selected" : "") + '" data-condition="' + n + '" style="background:' + CONDITION_COLORS[n] + ';color:' + CONDITION_TEXT_COLORS[n] + '">' + label + "</button><span class=\"condLabel\">" + CONDITION_LABELS[n] + "</span></div>";
       }).join("") +
       "</div>" +
       '<label>Surface (tap all that apply)</label>' +
@@ -581,7 +601,7 @@
     // Condition starts at the saved value (if any); Save stays disabled
     // until a box is picked.
     var condNum = Number(a.condition);
-    selectedCondition = (condNum >= 1 && condNum <= 4) ? condNum : null;
+    selectedCondition = (condNum >= 0 && condNum <= 4) ? condNum : null;
     saveBtn.disabled = selectedCondition === null;
     document.querySelectorAll(".condBox").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -589,6 +609,17 @@
         document.querySelectorAll(".condBox").forEach(function (b) { b.classList.remove("selected"); });
         btn.classList.add("selected");
         saveBtn.disabled = false;
+        // Disable Surface/Issues/Priority when "No Sidewalk" is picked
+        var noSidewalk = selectedCondition === 0;
+        document.querySelectorAll(".optBox").forEach(function (b) {
+          b.classList.toggle("disabled", noSidewalk);
+          if (noSidewalk) b.classList.remove("selected");
+        });
+        var prio = document.getElementById("priorityBox");
+        if (prio) {
+          prio.classList.toggle("disabled", noSidewalk);
+          if (noSidewalk) prio.classList.remove("checked");
+        }
       });
     });
     document.querySelectorAll(".optBox").forEach(function (btn) {
@@ -660,7 +691,7 @@
   }
 
   function saveAssessment(segmentId, condition, surface, issues, priorityFix, notes) {
-    if (!condition) {
+    if (condition === null || condition === undefined) {
       // Clearing: delete from Supabase if saving is on, else drop local copy.
       if (supabaseSaving) {
         fetch(BASE + "/rest/v1/segment_assessments?segment_id=eq." + encodeURIComponent(segmentId), {

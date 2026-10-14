@@ -35,9 +35,9 @@
   .mapBtn:hover { background: var(--bg-soft); border-color: #d1d5db; }
   .mapBtn:active { transform: translateY(1px); }
   .mapBtn.active { background: var(--green-600); color: #fff; border-color: var(--green-600); }
-  #locateBtn { top: 12px; right: 12px; padding: 9px; line-height: 0; min-height: 38px; min-width: 38px; justify-content: center; }
+  #locateBtn { top: 12px; right: 12px; padding: 9px; line-height: 0; height: 38px; width: 38px; box-sizing: border-box; justify-content: center; }
   #locateBtn svg { display: block; }
-  #globalBtn { top: 12px; right: 58px; min-height: 38px; }
+  #globalBtn { top: 12px; right: 58px; height: 38px; box-sizing: border-box; }
   #showPanelBtn { bottom: 16px; right: 12px; display: none; }
   #panel { width: 340px; border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; background: #fff; min-width: 0; transition: width .3s ease, opacity .25s ease, padding .3s ease; }
   #panel.hidden { display: none; }
@@ -55,7 +55,7 @@
   .condBox:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .condLabel { font-size: 11px; color: var(--ink-soft); text-align: center; line-height: 1.2; }
   #globalBtn { top: 12px; right: 58px; }
-  #globalPanel { position: absolute; top: 56px; right: 12px; z-index: 1000; width: 300px; max-width: calc(100vw - 24px); max-height: calc(100% - 68px); overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-md); }
+  #globalPanel { position: absolute; top: 56px; right: 12px; z-index: 1000; width: 340px; max-width: calc(100vw - 24px); max-height: calc(100% - 68px); overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-md); }
   #globalPanel.hidden { display: none; }
   .settingsSection { margin-bottom: 16px; }
   .settingsSection:last-child { margin-bottom: 0; }
@@ -65,6 +65,8 @@
   .optBox:hover { border-color: #d1d5db; background: var(--bg-soft); }
   .optBox.selected { border-color: var(--ink); background: var(--ink); color: #fff; }
   .optBox:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .optBox.disabled { opacity: 0.35; pointer-events: none; }
+  #priorityBox.disabled { opacity: 0.35; pointer-events: none; }
   .surfaceBox { background: #dbeafe; border-color: #dbeafe; }
   .surfaceBox.selected { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
   .issueBox { background: #fef3c7; border-color: #fef3c7; }
@@ -93,6 +95,8 @@
   #saveStatus.warn { color: #9a6a00; }
   #saveStatus.err { color: #b00020; }
   #viewToggle, #filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  #filters { flex-wrap: nowrap; }
+  #filters button { padding: 8px 12px; flex: 1; white-space: nowrap; }
   #viewToggle button, #filters button { padding: 8px 16px; font-size: 13px; font-weight: 600; border: 2px solid var(--line); border-radius: 999px; background: #fff; cursor: pointer; color: var(--ink); transition: all .15s; }
   #viewToggle button:hover, #filters button:hover { border-color: #d1d5db; background: var(--bg-soft); }
   #viewToggle button.active, #filters button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
@@ -115,8 +119,11 @@
   @media (max-width: 760px) {
     #main { flex-direction: column; }
     #mapWrap { flex: 1; min-height: 0; }
-    #panel { width: 100%; max-height: 45vh; border-left: 0; border-top: 1px solid var(--line); transition: max-height .3s ease, opacity .25s ease, padding .3s ease; }
+    #panel { width: 100%; max-height: 55vh; border-left: 0; border-top: 1px solid var(--line); transition: max-height .3s ease, opacity .25s ease, padding .3s ease; position: relative; }
     #panel.collapsed { width: 100%; max-height: 0; padding: 0; opacity: 0; overflow: hidden; border-top-width: 0; }
+    #panelToggle { width: auto; position: absolute; top: 12px; right: 12px; margin: 0; padding: 6px 10px; font-size: 12px; }
+    #parcelPanel h2 { padding-right: 100px; }
+    #stats { display: none; }
     header { padding: 10px 12px; }
     header h1 { font-size: 17px; }
   }
@@ -175,8 +182,8 @@
 <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=27"></script>
-<script src="buildings.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="config.js?v=32"></script>
+<script src="buildings.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>
