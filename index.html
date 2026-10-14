@@ -26,6 +26,7 @@
   header p { margin: 2px 0 0; color: var(--ink-soft); font-size: 13px; }
   #stats { font-size: 13px; color: var(--ink-soft); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #stats b { font-weight: 700; color: var(--ink); }
+  .statDiv { width: 1px; height: 16px; background: var(--line); flex: none; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: baseline; }
   #main { display: flex; height: calc(100vh - 62px); }
   #mapWrap { flex: 1; min-width: 0; position: relative; }
@@ -34,8 +35,9 @@
   .mapBtn:hover { background: var(--bg-soft); border-color: #d1d5db; }
   .mapBtn:active { transform: translateY(1px); }
   .mapBtn.active { background: var(--green-600); color: #fff; border-color: var(--green-600); }
-  #locateBtn { top: 12px; right: 12px; padding: 9px; line-height: 0; }
+  #locateBtn { top: 12px; right: 12px; padding: 9px; line-height: 0; min-height: 38px; min-width: 38px; justify-content: center; }
   #locateBtn svg { display: block; }
+  #globalBtn { top: 12px; right: 58px; min-height: 38px; }
   #showPanelBtn { bottom: 16px; right: 12px; display: none; }
   #panel { width: 340px; border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; background: #fff; min-width: 0; transition: width .3s ease, opacity .25s ease, padding .3s ease; }
   #panel.hidden { display: none; }
@@ -99,14 +101,14 @@
   .segDot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; flex: none; }
   .segEmpty { color: var(--ink-soft); font-size: 14px; padding: 12px 0; }
   #backBtn { margin: 0 0 12px; }
-  #searchRow { display: flex; gap: 8px; margin: 12px 0; }
-  #searchWrap { flex: 1; position: relative; min-width: 0; }
+  #searchRow { display: flex; gap: 8px; margin: 12px 0; align-items: stretch; }
+  #searchWrap { flex: 1; position: relative; min-width: 0; display: flex; }
   #searchWrap input { width: 100%; }
   #suggestions { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1px solid var(--line); border-radius: 10px; max-height: 240px; overflow-y: auto; z-index: 1000; box-shadow: var(--shadow-md); }
   .sugg { padding: 10px 14px; font-size: 14px; cursor: pointer; border-bottom: 1px solid var(--bg-soft); }
   .sugg:last-child { border-bottom: 0; }
   .sugg:hover, .sugg.selected { background: #eef4ff; }
-  #searchRow button { padding: 10px 14px; margin-top: 0; }
+  #searchRow button { padding: 10px 14px; margin-top: 0; white-space: nowrap; align-self: stretch; }
   #banner { display: none; background: #fffbeb; border-bottom: 1px solid #fde68a; padding: 12px 16px; font-size: 13px; color: #92400e; }
   #banner code { background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a; }
   #loading { padding: 12px 16px; font-size: 13px; color: var(--ink-soft); }
@@ -173,7 +175,8 @@
 <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="config.js?v=22"></script>
+<script src="buildings.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

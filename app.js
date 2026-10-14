@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 19;
+  var APP_VERSION = 22;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -50,7 +50,8 @@
     style: "https://tiles.openfreemap.org/styles/liberty",
     center: [-73.911, 41.926],
     zoom: 15,
-    maxZoom: 19
+    maxZoom: 19,
+    attributionControl: { compact: true }
   });
   map.on("load", function () {
     // Hide OSM buildings from the basemap; we use Microsoft footprints instead
@@ -62,9 +63,12 @@
     map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } });
     map.addLayer({ id: "parcels-line", type: "line", source: "parcels", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
     // Microsoft building footprints (open data) for neighborhood context.
-    map.addSource("buildings", { type: "geojson", data: "buildings.geojson?v=18" });
-    map.addLayer({ id: "buildings-fill", type: "fill", source: "buildings", paint: { "fill-color": "#d4d4d8", "fill-opacity": 0.5 } });
-    map.addLayer({ id: "buildings-line", type: "line", source: "buildings", paint: { "line-color": "#a1a1aa", "line-width": 1 } });
+    // Loaded from inline window.BUILDINGS (buildings.js) so it works from
+    // file:// without a local server; falls back to fetch if not present.
+    var buildingsData = (typeof window.BUILDINGS !== "undefined") ? window.BUILDINGS : "buildings.geojson?v=19";
+    map.addSource("buildings", { type: "geojson", data: buildingsData });
+    map.addLayer({ id: "buildings-fill", type: "fill", source: "buildings", minzoom: 17, paint: { "fill-color": "#d4d4d8", "fill-opacity": 0.5 } });
+    map.addLayer({ id: "buildings-line", type: "line", source: "buildings", minzoom: 17, paint: { "line-color": "#a1a1aa", "line-width": 1 } });
     map.addSource("segments", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     // NOTE: line-cap and line-join are LAYOUT properties in MapLibre, not
     // paint. Putting them in paint fails style validation and the whole
@@ -396,7 +400,7 @@
         CONDITION_LABELS[c] + ": <b>" + counts[c] + "</b></span>"
       );
     });
-    statsEl.innerHTML = parts.join(" ");
+    statsEl.innerHTML = parts.join('<span class="statDiv"></span>');
   }
 
   // Parcels shown under the current filter: a parcel shows when it has at
