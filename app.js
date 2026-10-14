@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 22;
+  var APP_VERSION = 27;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -23,7 +23,7 @@
   // (best). Map colors run red (1) to green (4).
   var CONDITION_COLORS = {
     1: "#d73027",
-    2: "#f46d43",
+    2: "#fdae61",
     3: "#a6d96a",
     4: "#2ca25f"
   };
@@ -39,8 +39,8 @@
     3: "#1a1a1a",
     4: "#ffffff"
   };
-  var SURFACES = ["Bluestone", "Concrete", "Asphalt", "Stone Aggregate", "Gravel", "Missing", "Other"];
-  var ISSUES = ["Lifted", "Cracked", "Worn", "Grass/Dirt", "Clearance", "Other"];
+  var SURFACES = ["Bluestone", "Concrete", "Asphalt", "Stone Aggregate", "Gravel", "Other"];
+  var ISSUES = ["Lifted", "Cracked", "Worn", "Grass/Dirt", "Narrow", "Other"];
 
   // MapLibre + OpenFreeMap vector tiles: the base map is vectors, so it
   // stays crisp at every zoom (no upscaled raster tiles), the Liberty style
@@ -373,7 +373,7 @@
     if (a && CONDITION_COLORS[a.condition]) {
       return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4 };
     }
-    return { color: "#4b5563", width: isSelected ? 7 : 4 };
+    return { color: "#6b7280", width: isSelected ? 5 : 2.5 };
   }
 
   function segmentMatchesFilter(seg) {
@@ -510,7 +510,7 @@
       var sa = segAssessments[s.properties.id];
       var status = (sa && CONDITION_COLORS[sa.condition])
         ? '<span class="segDot" style="background:' + CONDITION_COLORS[sa.condition] + '"></span>Condition ' + sa.condition
-        : '<span class="segDot" style="background:#4b5563"></span>Not assessed';
+        : '<span class="segDot" style="background:#4b5563"></span>Not Assessed';
       return '<button type="button" class="segRow" data-segment="' + s.properties.id + '"><span>' + escapeHtml(s.properties.street_name) + "</span><span>" + status + "</span></button>";
     }).join("") : '<p class="segEmpty">No sidewalk segments — this parcel does not front a street in the county roads data.</p>';
     panelEl.innerHTML =
