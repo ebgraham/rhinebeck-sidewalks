@@ -9,6 +9,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #1a1a1a; }
   header { padding: 10px 14px; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  #appVersion { display: block; text-align: right; font-size: 11px; color: #999; }
   header h1 { font-size: 18px; margin: 0; }
   header p { margin: 0; color: #555; font-size: 13px; }
   #stats { font-size: 13px; color: #333; }
@@ -30,9 +31,15 @@
   #panel h2 { font-size: 16px; margin: 0 0 8px; }
   #panel .meta { font-size: 13px; color: #555; margin-bottom: 12px; }
   #panel label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
-  .condBox { flex: 1; height: 40px; border: 3px solid transparent; border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer; padding: 0; }
+  .condRow { display: flex; gap: 8px; margin: 4px 0 12px; }
+  .condItem { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .condBox { width: 100%; aspect-ratio: 1 / 1; border: 3px solid transparent; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
   .condBox.selected { border-color: #1a1a1a; }
   .condBox:focus-visible { outline: 2px solid #1a1a1a; outline-offset: 2px; }
+  .condLabel { font-size: 11px; color: #555; text-align: center; }
+  #globalBtn { top: 10px; right: 56px; display: flex; align-items: center; gap: 6px; }
+  #globalPanel { position: absolute; top: 52px; right: 10px; z-index: 1000; width: 300px; max-width: calc(100vw - 20px); max-height: calc(100% - 64px); overflow-y: auto; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  #globalPanel.hidden { display: none; }
   .optRow { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
   .optBox { border: 3px solid transparent; border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; color: #1a1a1a; }
   .optBox.selected { border-color: #1a1a1a; }
@@ -49,7 +56,14 @@
   #saveStatus.ok { color: #1a6b3c; }
   #saveStatus.warn { color: #9a6a00; }
   #saveStatus.err { color: #b00020; }
-  #filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  #viewToggle { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 0; }
+  #viewToggle button { padding: 5px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 20px; background: #fff; cursor: pointer; }
+  #viewToggle button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .segRow { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 9px 10px; margin: 4px 0; font-size: 14px; text-align: left; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; }
+  .segRow:hover { background: #eef4ff; }
+  .segDot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .segEmpty { color: #555; font-size: 14px; }
+  #backBtn { margin: 0 0 10px; }
   #filters button { padding: 5px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 20px; background: #fff; cursor: pointer; }
   #filters button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
   #searchRow { display: flex; gap: 6px; margin: 10px 0; }
@@ -74,7 +88,8 @@
 <header>
   <div>
     <h1>Rhinebeck Village Sidewalk Survey</h1>
-    <p>Tap a parcel on the map to assess its sidewalk.</p>
+    <p>Tap a parcel to see its sidewalks, or tap a sidewalk line to assess it.</p>
+    <span id="appVersion"></span>
   </div>
   <div id="stats"></div>
 </header>
@@ -83,25 +98,30 @@
 <div id="main">
   <div id="mapWrap">
     <div id="map"></div>
+    <button class="mapBtn" id="globalBtn" type="button" aria-label="Show survey options" title="Show survey options"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h13M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>Survey Options</button>
+    <div id="globalPanel" class="hidden">
+      <div id="viewToggle">
+        <button data-view="sidewalks" class="active">Sidewalks</button>
+      </div>
+      <div id="filters">
+        <button data-filter="all" class="active">All</button>
+        <button data-filter="assessed">Assessed</button>
+        <button data-filter="unassessed">Not assessed</button>
+      </div>
+      <div id="searchRow">
+        <div id="searchWrap">
+          <input type="text" id="searchInput" placeholder="Search address or parcel ID, e.g. 2 Mill Rd" autocomplete="off">
+          <div id="suggestions"></div>
+        </div>
+        <button class="btn secondary" id="searchBtn" type="button">Go</button>
+      </div>
+      <button class="btn secondary" id="exportBtn" type="button">Export assessments (CSV)</button>
+    </div>
     <button class="mapBtn" id="locateBtn" type="button" aria-label="Locate me" title="Locate me"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
     <button class="mapBtn" id="showPanelBtn" type="button">Show panel</button>
   </div>
   <aside id="panel">
     <button class="btn secondary" id="panelToggle" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 9l3 3-3 3"/><path d="M10 4v16"/></svg>Hide panel</button>
-    <div id="filters">
-      <button data-filter="all" class="active">All parcels</button>
-      <button data-filter="assessed">Assessed</button>
-      <button data-filter="unassessed">Not assessed</button>
-    </div>
-    <div id="searchRow">
-      <div id="searchWrap">
-        <input type="text" id="searchInput" placeholder="Search address or parcel ID, e.g. 2 Mill Rd" autocomplete="off">
-        <div id="suggestions"></div>
-      </div>
-      <button class="btn secondary" id="searchBtn" type="button">Go</button>
-    </div>
-    <button class="btn secondary" id="exportBtn" type="button">Export assessments (CSV)</button>
-    <hr>
     <div id="parcelPanel">
       <p style="color:#555; font-size:14px;">Select a parcel on the map to assess its sidewalk.</p>
     </div>

@@ -1,7 +1,9 @@
 // Rhinebeck Village sidewalk survey map.
-// Reads parcels from Supabase (PostgREST) and saves assessments back to
-// Supabase when the sidewalk_assessments table exists (see sql/assessments.sql).
-// If Supabase saving is not set up, assessments fall back to localStorage.
+// Reads parcels and sidewalk segments from Supabase (PostgREST) and saves
+// segment assessments back to Supabase when the segment tables exist
+// (see sql/segments.sql). Assessments live on sidewalk segments: one per
+// parcel frontage on one street. If Supabase saving is not set up,
+// assessments fall back to localStorage.
 
 (function () {
   "use strict";
@@ -11,27 +13,31 @@
   var KEY = cfg.SUPABASE_ANON_KEY || "";
   var KEY_MISSING = !KEY || KEY === "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
 
-  // Condition is a 1-5 score, 5 = best. Map colors run red (1) to green (5).
+  // Bump this (and the ?v= on the script tags in index.html) on every
+  // app.js change so browsers fetch the new file instead of a cached one.
+  var APP_VERSION = 8;
+  var versionEl = document.getElementById("appVersion");
+  if (versionEl) versionEl.textContent = "v" + APP_VERSION;
+
+  // Condition is a 1-4 score: 1 = Damaged (worst) through 4 = Excellent
+  // (best). Map colors run red (1) to green (4).
   var CONDITION_COLORS = {
     1: "#d73027",
     2: "#f46d43",
-    3: "#fdae61",
-    4: "#a6d96a",
-    5: "#2ca25f"
+    3: "#a6d96a",
+    4: "#2ca25f"
   };
   var CONDITION_LABELS = {
-    1: "1 (worst)",
-    2: "2",
-    3: "3",
-    4: "4",
-    5: "5 (best)"
+    1: "Damaged",
+    2: "Deficient",
+    3: "Good",
+    4: "Excellent"
   };
   var CONDITION_TEXT_COLORS = {
     1: "#ffffff",
     2: "#ffffff",
     3: "#1a1a1a",
-    4: "#1a1a1a",
-    5: "#ffffff"
+    4: "#ffffff"
   };
   var SURFACES = ["Bluestone", "Concrete", "Asphalt", "Stone Aggregate", "Gravel", "Missing", "Other"];
   var ISSUES = ["Lifted", "Cracked", "Worn", "Grass/Dirt", "Clearance", "Other"];
@@ -50,14 +56,26 @@
     map.addSource("parcels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } });
     map.addLayer({ id: "parcels-line", type: "line", source: "parcels", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
+    map.addSource("segments", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"], "line-cap": "round", "line-join": "round" } });
+    map.on("mouseenter", "segments-line", function () { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", "segments-line", function () { map.getCanvas().style.cursor = ""; });
+    map.on("mouseenter", "parcels-fill", function () { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", "parcels-fill", function () { map.getCanvas().style.cursor = ""; });
+    // Click handlers per layer (the layer-click mechanism is the proven
+    // one here). Both layers are visible now, so both handlers fire on
+    // a line tap — the parcel handler defers when the tap also hits a
+    // sidewalk line, so the line wins.
+    map.on("click", "segments-line", function (e) {
+      if (e.features && e.features.length) selectSegment(e.features[0].properties.id);
+    });
+    map.on("click", "parcels-fill", function (e) {
+      if (map.queryRenderedFeatures(e.point, { layers: ["segments-line"] }).length) return;
+      if (e.features && e.features.length) selectParcel(e.features[0].properties.parcelgrid);
+    });
     map.addSource("loc-accuracy", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     map.addLayer({ id: "loc-accuracy-fill", type: "fill", source: "loc-accuracy", paint: { "fill-color": "#1a6bff", "fill-opacity": 0.12 } });
     map.addLayer({ id: "loc-accuracy-line", type: "line", source: "loc-accuracy", paint: { "line-color": "#1a6bff", "line-width": 1 } });
-    map.on("click", "parcels-fill", function (e) {
-      if (e.features && e.features.length) selectParcel(e.features[0].properties.parcelgrid);
-    });
-    map.on("mouseenter", "parcels-fill", function () { map.getCanvas().style.cursor = "pointer"; });
-    map.on("mouseleave", "parcels-fill", function () { map.getCanvas().style.cursor = ""; });
     if (parcels.length) renderLayer();
   });
 
@@ -124,7 +142,22 @@
 
   function onPositionError(err) {
     stopLocating();
-    alert("Could not get your location: " + err.message + ". Make sure location permission is allowed for this site (it needs HTTPS).");
+    // PERMISSION_DENIED is usually a saved "Don't Allow" — the browser will
+    // not re-prompt, so the user must re-enable it in site settings. A
+    // non-HTTPS page can never get location at all.
+    var msg;
+    if (err.code === 1) {
+      if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+        msg = "This page is not served over HTTPS, so the browser blocks location. Open the deployed HTTPS site instead of a local file or HTTP address.";
+      } else {
+        msg = "Location permission was denied for this site, and the browser will not ask again. Re-enable it in your browser's site settings for this site (on iPhone: Settings > Safari > Location, or the share / lock menu > Website Settings), then tap Locate again.";
+      }
+    } else if (err.code === 2) {
+      msg = "Position unavailable. Try again outside with a clearer view of the sky.";
+    } else {
+      msg = "Location timed out. Try again.";
+    }
+    alert("Could not get your location: " + msg);
   }
 
   locateBtn.addEventListener("click", function () {
@@ -191,11 +224,44 @@
   panelToggle.addEventListener("click", hidePanel);
   showPanelBtn.addEventListener("click", showPanel);
 
+  // Global controls (view toggle, filters, search, export) live in their
+  // own pop-out panel so the side panel stays parcel-specific. The
+  // Survey Options button on the map is always visible and toggles it.
+  var globalBtn = document.getElementById("globalBtn");
+  var globalPanel = document.getElementById("globalPanel");
+  globalBtn.addEventListener("click", function () {
+    var opening = globalPanel.classList.contains("hidden");
+    globalPanel.classList.toggle("hidden");
+    globalBtn.classList.toggle("active", opening);
+    globalBtn.setAttribute("aria-label", opening ? "Hide survey options" : "Show survey options");
+    globalBtn.title = opening ? "Hide survey options" : "Show survey options";
+  });
+
+  // Tapping anywhere outside the pop-out (and its button) dismisses it.
+  document.addEventListener("click", function (e) {
+    if (globalPanel.classList.contains("hidden")) return;
+    if (globalPanel.contains(e.target) || globalBtn.contains(e.target)) return;
+    globalPanel.classList.add("hidden");
+    globalBtn.classList.remove("active");
+    globalBtn.setAttribute("aria-label", "Show survey options");
+    globalBtn.title = "Show survey options";
+  });
+
   var parcels = []; // GeoJSON features
-  var assessments = {}; // parcelgrid -> {condition, notes, assessed_at, source}
+  var segments = []; // GeoJSON features: one per (parcel, street)
+  var segmentsByParcel = {}; // parcelgrid -> [segment features]
+  var segmentById = {}; // segment id -> feature
+  var segAssessments = {}; // segment id -> {condition, surface, issues, priority_fix, notes, assessed_at, source}
   var supabaseSaving = false;
+  var segmentsLoaded = false;
+  // Parcels are always displayed (outlines only, never filled) and
+  // always selectable. The Sidewalks layer (colored segment lines) is
+  // toggleable from the Survey Options pop-out and defaults to on,
+  // since parcels alone carry no condition color.
+  var showSidewalks = true;
   var activeFilter = "all";
   var selectedGrid = null;
+  var selectedSegmentId = null;
   var selectedCondition = null; // condition picked in the form (1-5), null = none
 
   var statsEl = document.getElementById("stats");
@@ -237,7 +303,7 @@
 
   function loadLocalAssessments() {
     try {
-      return JSON.parse(localStorage.getItem("rhinebeck-assessments") || "{}");
+      return JSON.parse(localStorage.getItem("rhinebeck-segment-assessments") || "{}");
     } catch (e) {
       return {};
     }
@@ -245,43 +311,52 @@
 
   function saveLocalAssessments() {
     var local = {};
-    Object.keys(assessments).forEach(function (grid) {
-      if (assessments[grid].source === "local") local[grid] = assessments[grid];
+    Object.keys(segAssessments).forEach(function (id) {
+      if (segAssessments[id].source === "local") local[id] = segAssessments[id];
     });
-    localStorage.setItem("rhinebeck-assessments", JSON.stringify(local));
+    localStorage.setItem("rhinebeck-segment-assessments", JSON.stringify(local));
   }
 
+  // Parcels are outlines only — never filled with color. All condition
+  // color lives on the sidewalk segment lines. Outline is blue, black
+  // when the parcel is selected.
   function styleFor(feature) {
-    var a = assessments[feature.properties.parcelgrid];
     var isSelected = feature.properties.parcelgrid === selectedGrid;
-    if (a && CONDITION_COLORS[a.condition]) {
-      return {
-        color: isSelected ? "#000" : "#fff",
-        weight: isSelected ? 3 : 1,
-        fillColor: CONDITION_COLORS[a.condition],
-        fillOpacity: 0.65
-      };
-    }
     return {
       color: isSelected ? "#000" : "#3388ff",
-      weight: isSelected ? 3 : 1,
-      fillColor: "#3388ff",
-      fillOpacity: isSelected ? 0.35 : 0.08
+      weight: isSelected ? 3 : 1
     };
   }
 
+  // Segment lines: condition color when assessed, gray when not.
+  function segmentStyleFor(feature) {
+    var a = segAssessments[feature.properties.id];
+    var isSelected = feature.properties.id === selectedSegmentId;
+    if (a && CONDITION_COLORS[a.condition]) {
+      return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4 };
+    }
+    return { color: "#4b5563", width: isSelected ? 7 : 4 };
+  }
+
+  function segmentMatchesFilter(seg) {
+    var has = !!segAssessments[seg.properties.id];
+    if (activeFilter === "assessed") return has;
+    if (activeFilter === "unassessed") return !has;
+    return true;
+  }
+
   function renderStats() {
-    var counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    var counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
     var assessed = 0;
-    Object.keys(assessments).forEach(function (grid) {
-      var c = assessments[grid].condition;
+    Object.keys(segAssessments).forEach(function (id) {
+      var c = segAssessments[id].condition;
       if (counts.hasOwnProperty(c)) {
         counts[c] += 1;
         assessed += 1;
       }
     });
-    var parts = ["<b>" + parcels.length + "</b> parcels", "<b>" + assessed + "</b> assessed"];
-    [5, 4, 3, 2, 1].forEach(function (c) {
+    var parts = ["<b>" + segments.length + "</b> sidewalk segments", "<b>" + assessed + "</b> assessed"];
+    [4, 3, 2, 1].forEach(function (c) {
       parts.push(
         '<span><span class="dot" style="background:' + CONDITION_COLORS[c] + '"></span>' +
         CONDITION_LABELS[c] + ": <b>" + counts[c] + "</b></span>"
@@ -290,11 +365,14 @@
     statsEl.innerHTML = parts.join(" ");
   }
 
+  // Parcels shown under the current filter: a parcel shows when it has at
+  // least one segment matching the filter (or, for "Not assessed", when
+  // none of its segments are assessed — including parcels with no segments).
   function visibleFeatures() {
     return parcels.filter(function (f) {
-      var has = !!assessments[f.properties.parcelgrid];
-      if (activeFilter === "assessed") return has;
-      if (activeFilter === "unassessed") return !has;
+      var segs = segmentsByParcel[f.properties.parcelgrid] || [];
+      if (activeFilter === "assessed") return segs.some(function (s) { return !!segAssessments[s.properties.id]; });
+      if (activeFilter === "unassessed") return !segs.some(function (s) { return !!segAssessments[s.properties.id]; });
       return true;
     });
   }
@@ -303,14 +381,54 @@
     if (!map.getSource("parcels")) return; // map style not loaded yet; the load handler re-renders
     var feats = visibleFeatures().map(function (f) {
       var s = styleFor(f);
+      var isSelected = f.properties.parcelgrid === selectedGrid;
+      // Parcel fills stay effectively invisible (1% opacity — visually
+      // colorless, but non-zero so the fill layer stays queryable and
+      // tappable); the fill layer exists only so parcels stay clickable.
+      // Outlines are blue, black when selected. All condition color is
+      // on the segment lines.
       var props = Object.assign({}, f.properties, {
-        fillColor: s.fillColor, fillOpacity: s.fillOpacity,
-        lineColor: s.color, lineWidth: s.weight
+        fillColor: "#3388ff", fillOpacity: 0.01,
+        lineColor: s.color,
+        lineWidth: s.weight
       });
       return { type: "Feature", properties: props, geometry: f.geometry };
     });
     map.getSource("parcels").setData({ type: "FeatureCollection", features: feats });
+    // Segments: visible only when the Sidewalks layer is on, and only
+    // matching the filter.
+    if (map.getSource("segments")) {
+      var segFeats = (showSidewalks ? segments.filter(segmentMatchesFilter) : []).map(function (f) {
+        var s = segmentStyleFor(f);
+        var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width });
+        return { type: "Feature", properties: props, geometry: f.geometry };
+      });
+      map.getSource("segments").setData({ type: "FeatureCollection", features: segFeats });
+    }
+    if (map.getLayer("parcels-fill")) {
+      map.setLayoutProperty("parcels-fill", "visibility", "visible");
+    }
+    if (map.getLayer("parcels-line")) {
+      map.setLayoutProperty("parcels-line", "visibility", "visible");
+    }
+    if (map.getLayer("segments-line")) {
+      map.setLayoutProperty("segments-line", "visibility", showSidewalks ? "visible" : "none");
+    }
     renderStats();
+  }
+
+  // The Sidewalks layer (segment lines) is toggleable from the Survey
+  // Options pop-out. Parcels are always on. Sidewalks needs the
+  // segments table; if it failed to load, the button is hidden and the
+  // layer stays off.
+  function setLayer(which, on) {
+    if (which !== "sidewalks") return;
+    if (on && !segmentsLoaded) return;
+    showSidewalks = on;
+    document.querySelectorAll("#viewToggle button").forEach(function (b) {
+      b.classList.toggle("active", showSidewalks);
+    });
+    renderLayer();
   }
 
   // Bounding box of GeoJSON features as [[minLng, minLat], [maxLng, maxLat]].
@@ -330,8 +448,11 @@
     return [[minX, minY], [maxX, maxY]];
   }
 
+  // Parcel panel: parcel details plus the list of its sidewalk segments.
+  // Tapping a segment opens that segment's assessment form.
   function selectParcel(grid) {
     selectedGrid = grid;
+    selectedSegmentId = null;
     if (panel.classList.contains("hidden")) showPanel();
     if (typeof closeSuggestions === "function") closeSuggestions();
     renderLayer();
@@ -341,22 +462,57 @@
     }
     if (!feature) return;
     var props = feature.properties;
-    var a = assessments[grid] || {};
-    var areaSqft = props.shape_area ? Math.round(props.shape_area).toLocaleString() : "—";
-    var areaAcres = props.shape_area ? (props.shape_area / 43560).toFixed(2) : "—";
+    var segs = segmentsByParcel[grid] || [];
+    var listHtml = segs.length ? segs.map(function (s) {
+      var sa = segAssessments[s.properties.id];
+      var status = (sa && CONDITION_COLORS[sa.condition])
+        ? '<span class="segDot" style="background:' + CONDITION_COLORS[sa.condition] + '"></span>Condition ' + sa.condition
+        : '<span class="segDot" style="background:#4b5563"></span>Not assessed';
+      return '<button type="button" class="segRow" data-segment="' + s.properties.id + '"><span>' + escapeHtml(s.properties.street_name) + "</span><span>" + status + "</span></button>";
+    }).join("") : '<p class="segEmpty">No sidewalk segments — this parcel does not front a street in the county roads data.</p>';
     panelEl.innerHTML =
       "<h2>" + escapeHtml(props.address || "No address on file") + "</h2>" +
       '<div class="meta">Parcel: ' + escapeHtml(props.printkey || grid) +
       "<br>Grid ID: " + escapeHtml(grid) +
-      "<br>Lot size: " + areaSqft + " sq ft (" + areaAcres + " acres)" +
       ((props.address_count > 1 && props.addresses)
         ? "<br><details><summary>All " + props.address_count + " addresses</summary>" + escapeHtml(props.addresses) + "</details>"
         : "") +
       "</div>" +
-      '<label>Condition (1 = worst, 5 = best)</label>' +
+      "<label>Sidewalks</label>" +
+      listHtml;
+    panelEl.querySelectorAll(".segRow").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        selectSegment(parseInt(btn.getAttribute("data-segment"), 10));
+      });
+    });
+    // Zoom to the parcel.
+    map.fitBounds(boundsOfFeatures([feature]), { padding: 60, maxZoom: 19 });
+  }
+
+  // Segment panel: the assessment form for one sidewalk segment.
+  function selectSegment(id) {
+    var seg = segmentById[id];
+    if (!seg) return;
+    selectedSegmentId = id;
+    var grid = seg.properties.parcelgrid;
+    selectedGrid = grid;
+    if (panel.classList.contains("hidden")) showPanel();
+    if (typeof closeSuggestions === "function") closeSuggestions();
+    renderLayer();
+    var parcelProps = null;
+    for (var i = 0; i < parcels.length; i++) {
+      if (parcels[i].properties.parcelgrid === grid) { parcelProps = parcels[i].properties; break; }
+    }
+    var a = segAssessments[id] || {};
+    panelEl.innerHTML =
+      '<button type="button" class="btn secondary" id="backBtn">\u2190 All sidewalks on this parcel</button>' +
+      "<h2>" + escapeHtml((parcelProps && parcelProps.address) || "No address on file") + "</h2>" +
+      '<div class="meta">Sidewalk on ' + escapeHtml(seg.properties.street_name) +
+      "<br>Parcel: " + escapeHtml((parcelProps && parcelProps.printkey) || grid) + "</div>" +
+      '<label>Condition</label>' +
       '<div class="condRow">' +
-      [1, 2, 3, 4, 5].map(function (n) {
-        return '<button type="button" class="condBox' + (String(a.condition) === String(n) ? " selected" : "") + '" data-condition="' + n + '" style="background:' + CONDITION_COLORS[n] + ';color:' + CONDITION_TEXT_COLORS[n] + '">' + n + "</button>";
+      [1, 2, 3, 4].map(function (n) {
+        return '<div class="condItem"><button type="button" class="condBox' + (String(a.condition) === String(n) ? " selected" : "") + '" data-condition="' + n + '" style="background:' + CONDITION_COLORS[n] + ';color:' + CONDITION_TEXT_COLORS[n] + '">' + n + "</button><span class=\"condLabel\">" + CONDITION_LABELS[n] + "</span></div>";
       }).join("") +
       "</div>" +
       '<label>Surface (tap all that apply)</label>' +
@@ -373,11 +529,14 @@
       '<button class="btn secondary" id="clearBtn" type="button">Clear</button>' +
       '<div id="saveStatus"></div>';
     document.getElementById("notesInput").value = a.notes || "";
+    document.getElementById("backBtn").addEventListener("click", function () {
+      selectParcel(grid);
+    });
     var saveBtn = document.getElementById("saveBtn");
     // Condition starts at the saved value (if any); Save stays disabled
     // until a box is picked.
     var condNum = Number(a.condition);
-    selectedCondition = (condNum >= 1 && condNum <= 5) ? condNum : null;
+    selectedCondition = (condNum >= 1 && condNum <= 4) ? condNum : null;
     saveBtn.disabled = selectedCondition === null;
     document.querySelectorAll(".condBox").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -397,18 +556,18 @@
       var issues = selectedValues("issue");
       var priorityFix = document.getElementById("priorityBox").classList.contains("selected");
       var notes = document.getElementById("notesInput").value.trim();
-      saveAssessment(grid, selectedCondition, surface, issues, priorityFix, notes);
+      saveAssessment(id, selectedCondition, surface, issues, priorityFix, notes);
     });
     document.getElementById("clearBtn").addEventListener("click", function () {
-      if (assessments[grid]) {
+      if (segAssessments[id]) {
         // Destructive: confirm before deleting the saved assessment.
-        if (confirm("Clear the saved assessment for this parcel?")) saveAssessment(grid, null);
+        if (confirm("Clear the saved assessment for this sidewalk?")) saveAssessment(id, null);
       } else {
         resetForm();
       }
     });
-    // Zoom to the parcel.
-    map.fitBounds(boundsOfFeatures([feature]), { padding: 60, maxZoom: 19 });
+    // Zoom to the segment.
+    map.fitBounds(boundsOfFeatures([seg]), { padding: 60, maxZoom: 19 });
   }
 
   // A row of toggle boxes for a multi-select group (Surface / Issues).
@@ -447,16 +606,16 @@
     if (sb) sb.disabled = true;
   }
 
-  function saveAssessment(grid, condition, surface, issues, priorityFix, notes) {
+  function saveAssessment(segmentId, condition, surface, issues, priorityFix, notes) {
     if (!condition) {
       // Clearing: delete from Supabase if saving is on, else drop local copy.
       if (supabaseSaving) {
-        fetch(BASE + "/rest/v1/sidewalk_assessments?parcelgrid=eq." + encodeURIComponent(grid), {
+        fetch(BASE + "/rest/v1/segment_assessments?segment_id=eq." + encodeURIComponent(segmentId), {
           method: "DELETE",
           headers: apiHeaders()
         }).then(function (res) {
           if (!res.ok) throw new Error("HTTP " + res.status);
-          delete assessments[grid];
+          delete segAssessments[segmentId];
           saveLocalAssessments();
           renderLayer();
           resetForm();
@@ -465,7 +624,7 @@
           setStatus("Could not clear in Supabase. The record may still exist.", "err");
         });
       } else {
-        delete assessments[grid];
+        delete segAssessments[segmentId];
         saveLocalAssessments();
         renderLayer();
         resetForm();
@@ -474,7 +633,7 @@
       return;
     }
     var record = {
-      parcelgrid: grid,
+      segment_id: segmentId,
       condition: condition,
       surface: surface || [],
       issues: issues || [],
@@ -483,29 +642,32 @@
       assessed_at: new Date().toISOString()
     };
     if (supabaseSaving) {
-      // on_conflict=parcelgrid is required: without it PostgREST targets the
-      // primary key for the merge, so re-saving an assessed parcel fails with
+      // on_conflict=segment_id is required: without it PostgREST targets the
+      // primary key for the merge, so re-saving an assessed segment fails with
       // a 409 duplicate-key error instead of updating the row.
-      fetch(BASE + "/rest/v1/sidewalk_assessments?on_conflict=parcelgrid", {
+      fetch(BASE + "/rest/v1/segment_assessments?on_conflict=segment_id", {
         method: "POST",
         headers: Object.assign(apiHeaders(), { Prefer: "resolution=merge-duplicates" }),
         body: JSON.stringify(record)
       }).then(function (res) {
         if (!res.ok) throw new Error("HTTP " + res.status);
-        assessments[grid] = Object.assign({}, record, { source: "supabase" });
+        segAssessments[segmentId] = Object.assign({}, record, { source: "supabase" });
         renderLayer();
-        setStatus("Saved.", "ok");
+        // Back to the parcel page: the segment list shows the updated
+        // condition for this sidewalk, which confirms the save.
+        var seg = segmentById[segmentId];
+        if (seg) selectParcel(seg.properties.parcelgrid);
       }).catch(function () {
-        assessments[grid] = Object.assign({}, record, { source: "local" });
+        segAssessments[segmentId] = Object.assign({}, record, { source: "local" });
         saveLocalAssessments();
         renderLayer();
         setStatus("Saved locally only — Supabase write failed.", "warn");
       });
     } else {
-      assessments[grid] = Object.assign({}, record, { source: "local" });
+      segAssessments[segmentId] = Object.assign({}, record, { source: "local" });
       saveLocalAssessments();
       renderLayer();
-      setStatus("Saved locally. Run the assessments SQL to enable Supabase saving (see README).", "warn");
+      setStatus("Saved locally. Run the segments SQL to enable Supabase saving (see README).", "warn");
     }
   }
 
@@ -641,12 +803,14 @@
   });
 
   document.getElementById("exportBtn").addEventListener("click", function () {
-    var lines = ["parcelgrid,printkey,address,addresses,condition,surface,issues,priority_fix,notes,assessed_at,source"];
+    var lines = ["segment_id,parcelgrid,printkey,address,street_name,condition,surface,issues,priority_fix,notes,assessed_at,source"];
     var byGrid = {};
     parcels.forEach(function (f) { byGrid[f.properties.parcelgrid] = f.properties; });
-    Object.keys(assessments).forEach(function (grid) {
-      var a = assessments[grid];
-      var csv = [grid, byGrid[grid] ? byGrid[grid].printkey || "" : "", byGrid[grid] ? byGrid[grid].address || "" : "", byGrid[grid] ? byGrid[grid].addresses || "" : "", a.condition != null ? String(a.condition) : "", (a.surface || []).join("; "), (a.issues || []).join("; "), a.priority_fix ? "true" : "false", (a.notes || "").replace(/"/g, '""'), a.assessed_at || "", a.source || ""];
+    Object.keys(segAssessments).forEach(function (id) {
+      var a = segAssessments[id];
+      var seg = segmentById[id];
+      var grid = seg ? seg.properties.parcelgrid : "";
+      var csv = [id, grid, byGrid[grid] ? byGrid[grid].printkey || "" : "", byGrid[grid] ? byGrid[grid].address || "" : "", seg ? seg.properties.street_name || "" : "", a.condition != null ? String(a.condition) : "", (a.surface || []).join("; "), (a.issues || []).join("; "), a.priority_fix ? "true" : "false", (a.notes || "").replace(/"/g, '""'), a.assessed_at || "", a.source || ""];
       lines.push(csv.map(function (v) { return '"' + v + '"'; }).join(","));
     });
     var blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -657,7 +821,14 @@
     URL.revokeObjectURL(a.href);
   });
 
-  // Boot: fetch parcels, then assessments (Supabase first, local as fallback).
+  document.querySelectorAll("#viewToggle button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      setLayer("sidewalks", !showSidewalks);
+    });
+  });
+
+  // Boot: fetch parcels, then segments, then segment assessments
+  // (Supabase first, local as fallback for assessments).
   if (KEY_MISSING) {
     showBanner(
       "Setup needed: paste your Supabase <b>publishable</b> key into <code>config.js</code> " +
@@ -675,12 +846,41 @@
           geometry: r.geom
         };
       });
-      loadingEl.textContent = "Loaded " + parcels.length + " parcels. Loading assessments…";
-      return fetchAll("/rest/v1/sidewalk_assessments?select=parcelgrid,condition,surface,issues,priority_fix,notes,assessed_at&order=parcelgrid")
+      loadingEl.textContent = "Loaded " + parcels.length + " parcels. Loading sidewalk segments…";
+      return fetchAll("/rest/v1/sidewalk_segments?select=id,parcelgrid,street_name,geom&order=id")
+        .then(function (srows) {
+          segmentsLoaded = true;
+          segments = srows.map(function (r) {
+            return {
+              type: "Feature",
+              properties: { id: r.id, parcelgrid: r.parcelgrid, street_name: r.street_name },
+              geometry: r.geom
+            };
+          });
+          segments.forEach(function (s) {
+            segmentById[s.properties.id] = s;
+            (segmentsByParcel[s.properties.parcelgrid] = segmentsByParcel[s.properties.parcelgrid] || []).push(s);
+          });
+          loadingEl.textContent = "Loaded " + segments.length + " sidewalk segments. Loading assessments…";
+        })
+        .catch(function () {
+          // Segments table missing (SQL not run yet): parcels still work,
+          // but there is nothing to assess. Hide the Sidewalks toggle.
+          segmentsLoaded = false;
+          showBanner(
+            "Sidewalk segments are not set up yet: the <code>sidewalk_segments</code> table was not found. " +
+            "Parcels still load, but assessments need the segments table — run <code>sql/segments.sql</code> (see README)."
+          );
+          var sb = document.querySelector('#viewToggle button[data-view="sidewalks"]');
+          if (sb) sb.style.display = "none";
+        });
+    })
+    .then(function () {
+      return fetchAll("/rest/v1/segment_assessments?select=segment_id,condition,surface,issues,priority_fix,notes,assessed_at&order=segment_id")
         .then(function (arows) {
           supabaseSaving = true;
           arows.forEach(function (r) {
-            assessments[r.parcelgrid] = {
+            segAssessments[r.segment_id] = {
               condition: r.condition,
               surface: r.surface || [],
               issues: r.issues || [],
@@ -694,16 +894,16 @@
         .catch(function () {
           supabaseSaving = false;
           showBanner(
-            "Supabase saving is not set up yet: the <code>sidewalk_assessments</code> table was not found. " +
-            "Assessments will save in this browser only until you run <code>sql/assessments.sql</code> (see README)."
+            "Supabase saving is not set up yet: the <code>segment_assessments</code> table was not found. " +
+            "Assessments will save in this browser only until you run <code>sql/segments.sql</code> (see README)."
           );
         });
     })
     .then(function () {
       // Merge in any assessments saved locally in this browser.
       var local = loadLocalAssessments();
-      Object.keys(local).forEach(function (grid) {
-        if (!assessments[grid]) assessments[grid] = local[grid];
+      Object.keys(local).forEach(function (id) {
+        if (!segAssessments[id]) segAssessments[id] = local[id];
       });
       loadingEl.style.display = "none";
       renderLayer();
