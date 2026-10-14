@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 10;
+  var APP_VERSION = 11;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -51,6 +51,10 @@
     center: [-73.911, 41.926],
     zoom: 15,
     maxZoom: 19
+  });
+  map.on("error", function (e) {
+    var el = document.getElementById("debug");
+    if (el) el.textContent += " | MAPERR: " + ((e.error && e.error.message) || e.message || "unknown");
   });
   map.on("load", function () {
     map.addSource("parcels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
