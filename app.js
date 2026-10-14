@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 13;
+  var APP_VERSION = 15;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -52,10 +52,6 @@
     zoom: 15,
     maxZoom: 19
   });
-  map.on("error", function (e) {
-    var el = document.getElementById("debug");
-    if (el) el.textContent += " | MAPERR: " + ((e.error && e.error.message) || e.message || "unknown");
-  });
   map.on("load", function () {
     map.addSource("parcels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } });
@@ -79,6 +75,17 @@
     map.on("click", "parcels-fill", function (e) {
       if (map.queryRenderedFeatures(e.point, { layers: ["segments-line"] }).length) return;
       if (e.features && e.features.length) selectParcel(e.features[0].properties.parcelgrid);
+    });
+    // Tapping empty map (no parcel, no segment) dismisses the selection
+    // and hides the panel.
+    map.on("click", function (e) {
+      var hits = map.queryRenderedFeatures(e.point, { layers: ["parcels-fill", "segments-line"] });
+      if (!hits.length && (selectedGrid !== null || selectedSegmentId !== null)) {
+        selectedGrid = null;
+        selectedSegmentId = null;
+        renderLayer();
+        hidePanel();
+      }
     });
     map.addSource("loc-accuracy", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     map.addLayer({ id: "loc-accuracy-fill", type: "fill", source: "loc-accuracy", paint: { "fill-color": "#1a6bff", "fill-opacity": 0.12 } });
@@ -233,7 +240,7 @@
 
   // Global controls (view toggle, filters, search, export) live in their
   // own pop-out panel so the side panel stays parcel-specific. The
-  // Survey Options button on the map is always visible and toggles it.
+  // Settings button on the map is always visible and toggles it.
   var globalBtn = document.getElementById("globalBtn");
   var globalPanel = document.getElementById("globalPanel");
   globalBtn.addEventListener("click", function () {
@@ -261,11 +268,12 @@
   var segAssessments = {}; // segment id -> {condition, surface, issues, priority_fix, notes, assessed_at, source}
   var supabaseSaving = false;
   var segmentsLoaded = false;
-  // Parcels are always displayed (outlines only, never filled) and
-  // always selectable. The Sidewalks layer (colored segment lines) is
-  // toggleable from the Survey Options pop-out and defaults to on,
-  // since parcels alone carry no condition color.
+  // Parcels are always displayed and always selectable. The Sidewalks
+  // layer (colored segment lines) is toggleable from the Settings pop-out
+  // and defaults to on. Unassessed segment lines are hidden by default;
+  // a Settings toggle shows them.
   var showSidewalks = true;
+  var showUnassessed = false;
   var activeFilter = "all";
   var selectedGrid = null;
   var selectedSegmentId = null;
@@ -324,15 +332,23 @@
     localStorage.setItem("rhinebeck-segment-assessments", JSON.stringify(local));
   }
 
-  // Parcels are outlines only — never filled with color. All condition
-  // color lives on the sidewalk segment lines. Outline is blue, black
-  // when the parcel is selected.
+  // Parcels: blue outline always. Selected parcel gets a light blue fill
+  // (keeping the usual blue border); parcels with at least one assessed
+  // segment get a very light blue fill. Unassessed, unselected parcels
+  // stay visually unfilled (1% opacity keeps the fill layer tappable).
   function styleFor(feature) {
     var isSelected = feature.properties.parcelgrid === selectedGrid;
     return {
-      color: isSelected ? "#000" : "#3388ff",
+      color: "#3388ff",
       weight: isSelected ? 3 : 1
     };
+  }
+
+  function parcelFillFor(feature, assessedParcels) {
+    var grid = feature.properties.parcelgrid;
+    if (grid === selectedGrid) return { fillColor: "#93c5fd", fillOpacity: 0.45 };
+    if (assessedParcels[grid]) return { fillColor: "#dbeafe", fillOpacity: 0.55 };
+    return { fillColor: "#3388ff", fillOpacity: 0.01 };
   }
 
   // Segment lines: condition color when assessed, gray when not.
@@ -386,16 +402,16 @@
 
   function renderLayer() {
     if (!map.getSource("parcels")) return; // map style not loaded yet; the load handler re-renders
+    // Parcels with at least one assessed segment get a very light blue fill.
+    var assessedParcels = {};
+    segments.forEach(function (seg) {
+      if (segAssessments[seg.properties.id]) assessedParcels[seg.properties.parcelgrid] = true;
+    });
     var feats = visibleFeatures().map(function (f) {
       var s = styleFor(f);
-      var isSelected = f.properties.parcelgrid === selectedGrid;
-      // Parcel fills stay effectively invisible (1% opacity — visually
-      // colorless, but non-zero so the fill layer stays queryable and
-      // tappable); the fill layer exists only so parcels stay clickable.
-      // Outlines are blue, black when selected. All condition color is
-      // on the segment lines.
+      var fill = parcelFillFor(f, assessedParcels);
       var props = Object.assign({}, f.properties, {
-        fillColor: "#3388ff", fillOpacity: 0.01,
+        fillColor: fill.fillColor, fillOpacity: fill.fillOpacity,
         lineColor: s.color,
         lineWidth: s.weight
       });
@@ -403,13 +419,16 @@
     });
     map.getSource("parcels").setData({ type: "FeatureCollection", features: feats });
     // Segments: visible only when the Sidewalks layer is on, and only
-    // matching the filter.
+    // matching the filter. Unassessed lines are hidden unless the
+    // Settings toggle shows them.
     if (map.getSource("segments")) {
-      var segFeats = (showSidewalks ? segments.filter(segmentMatchesFilter) : []).map(function (f) {
-        var s = segmentStyleFor(f);
-        var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width });
-        return { type: "Feature", properties: props, geometry: f.geometry };
-      });
+      var segFeats = (showSidewalks ? segments.filter(segmentMatchesFilter) : [])
+        .filter(function (f) { return showUnassessed || segAssessments[f.properties.id]; })
+        .map(function (f) {
+          var s = segmentStyleFor(f);
+          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width });
+          return { type: "Feature", properties: props, geometry: f.geometry };
+        });
       map.getSource("segments").setData({ type: "FeatureCollection", features: segFeats });
     }
     if (map.getLayer("parcels-fill")) {
@@ -422,37 +441,6 @@
       map.setLayoutProperty("segments-line", "visibility", showSidewalks ? "visible" : "none");
     }
     renderStats();
-    updateDebug();
-  }
-
-  // Temporary diagnostics for the missing-lines bug: shows what the
-  // segments layer actually holds and whether it draws. Remove once the
-  // bug is found. Also captures any JS error (e.g. a failed addLayer).
-  window.addEventListener("error", function (e) {
-    var el = document.getElementById("debug");
-    if (el) el.textContent += " | JSERR: " + (e.message || (e.error && e.error.message) || e.type);
-  });
-
-  function updateDebug() {
-    var el = document.getElementById("debug");
-    if (!el) return;
-    var srcState = "missing", layerState = "missing", vis = "";
-    try { srcState = map.getSource("segments") ? "exists" : "missing"; } catch (e) { srcState = "threw"; }
-    try {
-      if (map.getLayer("segments-line")) {
-        layerState = "exists";
-        try { vis = map.getLayoutProperty("segments-line", "visibility"); } catch (e2) {}
-      }
-    } catch (e) { layerState = "threw"; }
-    el.textContent = "segs=" + segments.length + " src=" + srcState + " layer=" + layerState + " vis=" + vis;
-    // Rendered features lag one frame behind setData; check after paint.
-    setTimeout(function () {
-      var rendered = -1;
-      try {
-        rendered = map.queryRenderedFeatures(map.project(map.getCenter()), { layers: ["segments-line"] }).length;
-      } catch (e) {}
-      el.textContent += " rendered@center=" + rendered;
-    }, 300);
   }
 
   // The Sidewalks layer (segment lines) is toggleable from the Survey
@@ -861,7 +849,13 @@
 
   document.querySelectorAll("#viewToggle button").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      setLayer("sidewalks", !showSidewalks);
+      if (btn.getAttribute("data-view") === "unassessed") {
+        showUnassessed = !showUnassessed;
+        btn.classList.toggle("active", showUnassessed);
+        renderLayer();
+      } else {
+        setLayer("sidewalks", !showSidewalks);
+      }
     });
   });
 

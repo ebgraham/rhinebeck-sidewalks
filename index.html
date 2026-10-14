@@ -10,7 +10,6 @@
   body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #1a1a1a; }
   header { padding: 10px 14px; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   #appVersion { display: block; text-align: right; font-size: 11px; color: #999; }
-  #debug { position: fixed; left: 8px; bottom: 8px; z-index: 2000; background: rgba(255,255,255,.92); border: 1px solid #ccc; padding: 4px 8px; font: 11px monospace; }
   header h1 { font-size: 18px; margin: 0; }
   header p { margin: 0; color: #555; font-size: 13px; }
   #stats { font-size: 13px; color: #333; }
@@ -95,15 +94,15 @@
   <div id="stats"></div>
 </header>
 <div id="banner"></div>
-<div id="debug"></div>
 <div id="loading">Loading parcels…</div>
 <div id="main">
   <div id="mapWrap">
     <div id="map"></div>
-    <button class="mapBtn" id="globalBtn" type="button" aria-label="Show survey options" title="Show survey options"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h13M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>Survey Options</button>
+    <button class="mapBtn" id="globalBtn" type="button" aria-label="Show settings" title="Show settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h13M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>Settings</button>
     <div id="globalPanel" class="hidden">
       <div id="viewToggle">
         <button data-view="sidewalks" class="active">Sidewalks</button>
+        <button data-view="unassessed">Unassessed lines</button>
       </div>
       <div id="filters">
         <button data-filter="all" class="active">All</button>
@@ -132,7 +131,7 @@
 <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<script src="config.js?v=15"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>
