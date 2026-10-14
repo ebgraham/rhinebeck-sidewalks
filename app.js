@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 8;
+  var APP_VERSION = 9;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -415,6 +415,28 @@
       map.setLayoutProperty("segments-line", "visibility", showSidewalks ? "visible" : "none");
     }
     renderStats();
+    updateDebug();
+  }
+
+  // Temporary diagnostics for the missing-lines bug: shows what the
+  // segments layer actually holds and whether it draws. Remove once the
+  // bug is found.
+  function updateDebug() {
+    var el = document.getElementById("debug");
+    if (!el || !map.getSource("segments")) return;
+    var vis = "";
+    try { vis = map.getLayoutProperty("segments-line", "visibility"); } catch (e) {}
+    var src = -1;
+    try { src = map.querySourceFeatures("segments").length; } catch (e) {}
+    el.textContent = "segs=" + segments.length + " layer=" + vis + " src=" + src;
+    // Rendered features lag one frame behind setData; check after paint.
+    setTimeout(function () {
+      var rendered = -1;
+      try {
+        rendered = map.queryRenderedFeatures(map.project(map.getCenter()), { layers: ["segments-line"] }).length;
+      } catch (e) {}
+      el.textContent = "segs=" + segments.length + " layer=" + vis + " src=" + src + " rendered@center=" + rendered;
+    }, 300);
   }
 
   // The Sidewalks layer (segment lines) is toggleable from the Survey

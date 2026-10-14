@@ -10,6 +10,7 @@
   body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #1a1a1a; }
   header { padding: 10px 14px; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   #appVersion { display: block; text-align: right; font-size: 11px; color: #999; }
+  #debug { position: fixed; left: 8px; bottom: 8px; z-index: 2000; background: rgba(255,255,255,.92); border: 1px solid #ccc; padding: 4px 8px; font: 11px monospace; }
   header h1 { font-size: 18px; margin: 0; }
   header p { margin: 0; color: #555; font-size: 13px; }
   #stats { font-size: 13px; color: #333; }
@@ -94,6 +95,7 @@
   <div id="stats"></div>
 </header>
 <div id="banner"></div>
+<div id="debug"></div>
 <div id="loading">Loading parcels…</div>
 <div id="main">
   <div id="mapWrap">
@@ -128,7 +130,9 @@
   </aside>
 </div>
 <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
+     browsers fetch the new file instead of a cached one. -->
+<script src="config.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
