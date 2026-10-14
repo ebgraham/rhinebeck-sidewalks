@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 9;
+  var APP_VERSION = 10;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -420,22 +420,31 @@
 
   // Temporary diagnostics for the missing-lines bug: shows what the
   // segments layer actually holds and whether it draws. Remove once the
-  // bug is found.
+  // bug is found. Also captures any JS error (e.g. a failed addLayer).
+  window.addEventListener("error", function (e) {
+    var el = document.getElementById("debug");
+    if (el) el.textContent += " | JSERR: " + (e.message || (e.error && e.error.message) || e.type);
+  });
+
   function updateDebug() {
     var el = document.getElementById("debug");
-    if (!el || !map.getSource("segments")) return;
-    var vis = "";
-    try { vis = map.getLayoutProperty("segments-line", "visibility"); } catch (e) {}
-    var src = -1;
-    try { src = map.querySourceFeatures("segments").length; } catch (e) {}
-    el.textContent = "segs=" + segments.length + " layer=" + vis + " src=" + src;
+    if (!el) return;
+    var srcState = "missing", layerState = "missing", vis = "";
+    try { srcState = map.getSource("segments") ? "exists" : "missing"; } catch (e) { srcState = "threw"; }
+    try {
+      if (map.getLayer("segments-line")) {
+        layerState = "exists";
+        try { vis = map.getLayoutProperty("segments-line", "visibility"); } catch (e2) {}
+      }
+    } catch (e) { layerState = "threw"; }
+    el.textContent = "segs=" + segments.length + " src=" + srcState + " layer=" + layerState + " vis=" + vis;
     // Rendered features lag one frame behind setData; check after paint.
     setTimeout(function () {
       var rendered = -1;
       try {
         rendered = map.queryRenderedFeatures(map.project(map.getCenter()), { layers: ["segments-line"] }).length;
       } catch (e) {}
-      el.textContent = "segs=" + segments.length + " layer=" + vis + " src=" + src + " rendered@center=" + rendered;
+      el.textContent += " rendered@center=" + rendered;
     }, 300);
   }
 
