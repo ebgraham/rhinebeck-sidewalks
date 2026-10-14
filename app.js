@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 11;
+  var APP_VERSION = 12;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -57,11 +57,26 @@
     if (el) el.textContent += " | MAPERR: " + ((e.error && e.error.message) || e.message || "unknown");
   });
   map.on("load", function () {
-    map.addSource("parcels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } });
-    map.addLayer({ id: "parcels-line", type: "line", source: "parcels", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
-    map.addSource("segments", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"], "line-cap": "round", "line-join": "round" } });
+    // Temporary: instrument every addSource/addLayer to find the failure.
+    function dlog(m) {
+      var el = document.getElementById("debug");
+      if (el) el.textContent += " | " + m;
+    }
+    function addSrc(id, spec) {
+      try { map.addSource(id, spec); dlog("src " + id + " ok"); }
+      catch (e) { dlog("src " + id + " ERR " + e.message); }
+    }
+    function addLyr(spec) {
+      try {
+        map.addLayer(spec);
+        dlog("lyr " + spec.id + " ok getLayer=" + (map.getLayer(spec.id) ? "exists" : "missing"));
+      } catch (e) { dlog("lyr " + spec.id + " ERR " + e.message); }
+    }
+    addSrc("parcels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    addLyr({ id: "parcels-fill", type: "fill", source: "parcels", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } });
+    addLyr({ id: "parcels-line", type: "line", source: "parcels", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
+    addSrc("segments", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    addLyr({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"], "line-cap": "round", "line-join": "round" } });
     map.on("mouseenter", "segments-line", function () { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", "segments-line", function () { map.getCanvas().style.cursor = ""; });
     map.on("mouseenter", "parcels-fill", function () { map.getCanvas().style.cursor = "pointer"; });
