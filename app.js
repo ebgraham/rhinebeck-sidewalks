@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 15;
+  var APP_VERSION = 19;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -53,33 +53,44 @@
     maxZoom: 19
   });
   map.on("load", function () {
+    // Hide OSM buildings from the basemap; we use Microsoft footprints instead
+    // for consistent village-wide coverage.
+    ["building", "building-3d"].forEach(function (lid) {
+      if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", "none");
+    });
     map.addSource("parcels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", paint: { "fill-color": ["get", "fillColor"], "fill-opacity": ["get", "fillOpacity"] } });
     map.addLayer({ id: "parcels-line", type: "line", source: "parcels", paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
+    // Microsoft building footprints (open data) for neighborhood context.
+    map.addSource("buildings", { type: "geojson", data: "buildings.geojson?v=18" });
+    map.addLayer({ id: "buildings-fill", type: "fill", source: "buildings", paint: { "fill-color": "#d4d4d8", "fill-opacity": 0.5 } });
+    map.addLayer({ id: "buildings-line", type: "line", source: "buildings", paint: { "line-color": "#a1a1aa", "line-width": 1 } });
     map.addSource("segments", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     // NOTE: line-cap and line-join are LAYOUT properties in MapLibre, not
     // paint. Putting them in paint fails style validation and the whole
     // layer is rejected (this was the missing-lines bug).
     map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
-    map.on("mouseenter", "segments-line", function () { map.getCanvas().style.cursor = "pointer"; });
-    map.on("mouseleave", "segments-line", function () { map.getCanvas().style.cursor = ""; });
+    // Invisible wide hit layer for easier tapping (does not affect visual line width).
+    map.addLayer({ id: "segments-hit", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#000", "line-opacity": 0, "line-width": 24 } });
+    map.on("mouseenter", "segments-hit", function () { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", "segments-hit", function () { map.getCanvas().style.cursor = ""; });
     map.on("mouseenter", "parcels-fill", function () { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", "parcels-fill", function () { map.getCanvas().style.cursor = ""; });
     // Click handlers per layer (the layer-click mechanism is the proven
     // one here). Both layers are visible now, so both handlers fire on
     // a line tap — the parcel handler defers when the tap also hits a
     // sidewalk line, so the line wins.
-    map.on("click", "segments-line", function (e) {
+    map.on("click", "segments-hit", function (e) {
       if (e.features && e.features.length) selectSegment(e.features[0].properties.id);
     });
     map.on("click", "parcels-fill", function (e) {
-      if (map.queryRenderedFeatures(e.point, { layers: ["segments-line"] }).length) return;
+      if (map.queryRenderedFeatures(e.point, { layers: ["segments-hit"] }).length) return;
       if (e.features && e.features.length) selectParcel(e.features[0].properties.parcelgrid);
     });
     // Tapping empty map (no parcel, no segment) dismisses the selection
     // and hides the panel.
     map.on("click", function (e) {
-      var hits = map.queryRenderedFeatures(e.point, { layers: ["parcels-fill", "segments-line"] });
+      var hits = map.queryRenderedFeatures(e.point, { layers: ["parcels-fill", "segments-hit"] });
       if (!hits.length && (selectedGrid !== null || selectedSegmentId !== null)) {
         selectedGrid = null;
         selectedSegmentId = null;
@@ -440,6 +451,9 @@
     if (map.getLayer("segments-line")) {
       map.setLayoutProperty("segments-line", "visibility", showSidewalks ? "visible" : "none");
     }
+    if (map.getLayer("segments-hit")) {
+      map.setLayoutProperty("segments-hit", "visibility", showSidewalks ? "visible" : "none");
+    }
     renderStats();
   }
 
@@ -451,9 +465,8 @@
     if (which !== "sidewalks") return;
     if (on && !segmentsLoaded) return;
     showSidewalks = on;
-    document.querySelectorAll("#viewToggle button").forEach(function (b) {
-      b.classList.toggle("active", showSidewalks);
-    });
+    var sb = document.querySelector('#viewToggle button[data-view="sidewalks"]');
+    if (sb) sb.classList.toggle("active", showSidewalks);
     renderLayer();
   }
 
@@ -537,7 +550,7 @@
       "<br>Parcel: " + escapeHtml((parcelProps && parcelProps.printkey) || grid) + "</div>" +
       '<label>Condition</label>' +
       '<div class="condRow">' +
-      [1, 2, 3, 4].map(function (n) {
+      [4, 3, 2, 1].map(function (n) {
         return '<div class="condItem"><button type="button" class="condBox' + (String(a.condition) === String(n) ? " selected" : "") + '" data-condition="' + n + '" style="background:' + CONDITION_COLORS[n] + ';color:' + CONDITION_TEXT_COLORS[n] + '">' + n + "</button><span class=\"condLabel\">" + CONDITION_LABELS[n] + "</span></div>";
       }).join("") +
       "</div>" +
@@ -547,10 +560,12 @@
       optionGroup("issue", ISSUES, a.issues, "issueBox") +
       '<label>Priority</label>' +
       '<div class="optRow">' +
-      '<button type="button" class="optBox priorityBox' + (a.priority_fix ? " selected" : "") + '" id="priorityBox">Priority Fix</button>' +
+      '<button type="button" class="priorityCheck' + (a.priority_fix ? " checked" : "") + '" id="priorityBox" aria-pressed="' + (a.priority_fix ? "true" : "false") + '">' +
+      '<span class="checkBox"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+      'Priority Fix</button>' +
       "</div>" +
       '<label for="notesInput">Notes</label>' +
-      '<textarea id="notesInput" placeholder="..."></textarea>' +
+      '<textarea id="notesInput" placeholder="sidewalk notes ..."></textarea>' +
       '<button class="btn" id="saveBtn" type="button">Save assessment</button> ' +
       '<button class="btn secondary" id="clearBtn" type="button">Clear</button>' +
       '<div id="saveStatus"></div>';
@@ -577,10 +592,17 @@
         btn.classList.toggle("selected");
       });
     });
+    var priorityBtn = document.getElementById("priorityBox");
+    if (priorityBtn) {
+      priorityBtn.addEventListener("click", function () {
+        var on = priorityBtn.classList.toggle("checked");
+        priorityBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
     saveBtn.addEventListener("click", function () {
       var surface = selectedValues("surface");
       var issues = selectedValues("issue");
-      var priorityFix = document.getElementById("priorityBox").classList.contains("selected");
+      var priorityFix = document.getElementById("priorityBox").classList.contains("checked");
       var notes = document.getElementById("notesInput").value.trim();
       saveAssessment(id, selectedCondition, surface, issues, priorityFix, notes);
     });
@@ -626,6 +648,7 @@
   function resetForm() {
     selectedCondition = null;
     document.querySelectorAll(".condBox, .optBox").forEach(function (el) { el.classList.remove("selected"); });
+    document.querySelectorAll(".priorityCheck").forEach(function (el) { el.classList.remove("checked"); el.setAttribute("aria-pressed", "false"); });
     var nt = document.getElementById("notesInput");
     if (nt) nt.value = "";
     var sb = document.getElementById("saveBtn");

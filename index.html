@@ -7,80 +7,116 @@
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css">
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #1a1a1a; }
-  header { padding: 10px 14px; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  #appVersion { display: block; text-align: right; font-size: 11px; color: #999; }
-  header h1 { font-size: 18px; margin: 0; }
-  header p { margin: 0; color: #555; font-size: 13px; }
-  #stats { font-size: 13px; color: #333; }
-  #stats b { margin-left: 8px; }
-  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
-  #main { display: flex; height: calc(100vh - 57px); }
+  :root {
+    --green-700: #166534;
+    --green-600: #1a6b3c;
+    --ink: #1a1a1a;
+    --ink-soft: #4b5563;
+    --ink-faint: #6b7280;
+    --line: #e5e7eb;
+    --bg-soft: #f9fafb;
+    --radius: 10px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.08);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.12);
+  }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: #fff; -webkit-font-smoothing: antialiased; }
+  header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; background: #fff; }
+  #appVersion { display: block; text-align: right; font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  header h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+  header p { margin: 2px 0 0; color: var(--ink-soft); font-size: 13px; }
+  #stats { font-size: 13px; color: var(--ink-soft); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #stats b { font-weight: 700; color: var(--ink); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: baseline; }
+  #main { display: flex; height: calc(100vh - 62px); }
   #mapWrap { flex: 1; min-width: 0; position: relative; }
   #map { width: 100%; height: 100%; }
-  .mapBtn { position: absolute; z-index: 1000; background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 8px 12px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-  .mapBtn.active { background: #1a6b3c; color: #fff; border-color: #1a6b3c; }
-  #locateBtn { top: 10px; right: 10px; padding: 8px; line-height: 0; }
+  .mapBtn { position: absolute; z-index: 1000; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-md); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; transition: background .15s, border-color .15s, transform .1s; }
+  .mapBtn:hover { background: var(--bg-soft); border-color: #d1d5db; }
+  .mapBtn:active { transform: translateY(1px); }
+  .mapBtn.active { background: var(--green-600); color: #fff; border-color: var(--green-600); }
+  #locateBtn { top: 12px; right: 12px; padding: 9px; line-height: 0; }
   #locateBtn svg { display: block; }
-  #showPanelBtn { bottom: 16px; right: 10px; display: none; }
-  #panel { width: 320px; border-left: 1px solid #ddd; padding: 14px; overflow-y: auto; background: #fff; min-width: 0; transition: width .3s ease, opacity .25s ease, padding .3s ease; }
+  #showPanelBtn { bottom: 16px; right: 12px; display: none; }
+  #panel { width: 340px; border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; background: #fff; min-width: 0; transition: width .3s ease, opacity .25s ease, padding .3s ease; }
   #panel.hidden { display: none; }
   #panel.collapsed { width: 0; padding: 0; opacity: 0; overflow: hidden; border-left-width: 0; }
-  #panelToggle { width: 100%; margin: 0 0 10px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  #panelToggle { width: 100%; margin: 0 0 12px; display: flex; align-items: center; justify-content: center; gap: 8px; }
   #panelToggle svg { flex: none; }
-  #panel h2 { font-size: 16px; margin: 0 0 8px; }
-  #panel .meta { font-size: 13px; color: #555; margin-bottom: 12px; }
-  #panel label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
-  .condRow { display: flex; gap: 8px; margin: 4px 0 12px; }
-  .condItem { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .condBox { width: 100%; aspect-ratio: 1 / 1; border: 3px solid transparent; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
-  .condBox.selected { border-color: #1a1a1a; }
-  .condBox:focus-visible { outline: 2px solid #1a1a1a; outline-offset: 2px; }
-  .condLabel { font-size: 11px; color: #555; text-align: center; }
-  #globalBtn { top: 10px; right: 56px; display: flex; align-items: center; gap: 6px; }
-  #globalPanel { position: absolute; top: 52px; right: 10px; z-index: 1000; width: 300px; max-width: calc(100vw - 20px); max-height: calc(100% - 64px); overflow-y: auto; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  #panel h2 { font-size: 17px; margin: 0 0 6px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+  #panel .meta { font-size: 13px; color: var(--ink-soft); margin-bottom: 14px; line-height: 1.5; }
+  #panel label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin: 16px 0 8px; }
+  .condRow { display: flex; gap: 8px; margin: 4px 0 8px; }
+  .condItem { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .condBox { width: 100%; aspect-ratio: 1 / 1; border: 3px solid transparent; border-radius: 8px; font-size: 20px; font-weight: 800; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; transition: transform .1s, box-shadow .15s; box-shadow: var(--shadow-sm); }
+  .condBox:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .condBox.selected { border-color: var(--ink); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ink); }
+  .condBox:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .condLabel { font-size: 11px; color: var(--ink-soft); text-align: center; line-height: 1.2; }
+  #globalBtn { top: 12px; right: 58px; }
+  #globalPanel { position: absolute; top: 56px; right: 12px; z-index: 1000; width: 300px; max-width: calc(100vw - 24px); max-height: calc(100% - 68px); overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-md); }
   #globalPanel.hidden { display: none; }
-  .optRow { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
-  .optBox { border: 3px solid transparent; border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; color: #1a1a1a; }
-  .optBox.selected { border-color: #1a1a1a; }
-  .optBox:focus-visible { outline: 2px solid #1a1a1a; outline-offset: 2px; }
-  .surfaceBox { background: #dbeafe; }
-  .issueBox { background: #fef3c7; }
-  .priorityBox { background: #e9d5ff; }
-  #panel select, #panel textarea, #panel input[type="text"] { width: 100%; padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
-  #panel textarea { min-height: 70px; resize: vertical; }
-  .btn { display: inline-block; padding: 8px 14px; font-size: 14px; border: 0; border-radius: 6px; cursor: pointer; background: #1a6b3c; color: #fff; margin-top: 12px; }
-  .btn.secondary { background: #eee; color: #222; }
-  .btn:disabled { opacity: 0.5; cursor: default; }
-  #saveStatus { font-size: 13px; margin-top: 8px; min-height: 18px; }
-  #saveStatus.ok { color: #1a6b3c; }
+  .settingsSection { margin-bottom: 16px; }
+  .settingsSection:last-child { margin-bottom: 0; }
+  .settingsSection h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .optRow { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+  .optBox { border: 2px solid var(--line); border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--ink); background: #fff; transition: all .15s; }
+  .optBox:hover { border-color: #d1d5db; background: var(--bg-soft); }
+  .optBox.selected { border-color: var(--ink); background: var(--ink); color: #fff; }
+  .optBox:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .surfaceBox { background: #dbeafe; border-color: #dbeafe; }
+  .surfaceBox.selected { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+  .issueBox { background: #fef3c7; border-color: #fef3c7; }
+  .issueBox.selected { background: #b45309; border-color: #b45309; color: #fff; }
+  /* Red drawn checkbox for Priority Fix */
+  .priorityCheck { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--ink); background: #fff; border: 2px solid var(--line); border-radius: 8px; transition: all .15s; }
+  .priorityCheck:hover { border-color: #fca5a5; background: #fef2f2; }
+  .priorityCheck .checkBox { width: 22px; height: 22px; border-radius: 6px; border: 2px solid #d1d5db; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex: none; transition: all .15s; }
+  .priorityCheck .checkBox svg { opacity: 0; transform: scale(0.6); transition: all .15s; }
+  .priorityCheck.checked { border-color: #dc2626; background: #fef2f2; }
+  .priorityCheck.checked .checkBox { background: #dc2626; border-color: #dc2626; }
+  .priorityCheck.checked .checkBox svg { opacity: 1; transform: scale(1); }
+  .priorityCheck:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; }
+  #panel select, #panel textarea, #panel input[type="text"] { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; transition: border-color .15s, box-shadow .15s; }
+  #panel select:focus, #panel textarea:focus, #panel input[type="text"]:focus { outline: none; border-color: var(--green-600); box-shadow: 0 0 0 3px rgba(26,107,60,.12); }
+  #panel textarea { min-height: 76px; resize: vertical; line-height: 1.5; }
+  #panel textarea::placeholder { color: #9ca3af; }
+  .btn { display: inline-block; padding: 10px 18px; font-size: 14px; font-weight: 600; border: 0; border-radius: 8px; cursor: pointer; background: var(--green-600); color: #fff; margin-top: 14px; transition: background .15s, transform .1s; box-shadow: var(--shadow-sm); }
+  .btn:hover { background: var(--green-700); }
+  .btn:active { transform: translateY(1px); }
+  .btn.secondary { background: #f3f4f6; color: var(--ink); border: 1px solid var(--line); }
+  .btn.secondary:hover { background: #e5e7eb; }
+  .btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+  #saveStatus { font-size: 13px; margin-top: 10px; min-height: 18px; font-weight: 500; }
+  #saveStatus.ok { color: var(--green-600); }
   #saveStatus.warn { color: #9a6a00; }
   #saveStatus.err { color: #b00020; }
-  #viewToggle { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 0; }
-  #viewToggle button { padding: 5px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 20px; background: #fff; cursor: pointer; }
-  #viewToggle button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-  .segRow { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 9px 10px; margin: 4px 0; font-size: 14px; text-align: left; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; }
-  .segRow:hover { background: #eef4ff; }
-  .segDot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
-  .segEmpty { color: #555; font-size: 14px; }
-  #backBtn { margin: 0 0 10px; }
-  #filters button { padding: 5px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 20px; background: #fff; cursor: pointer; }
-  #filters button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-  #searchRow { display: flex; gap: 6px; margin: 10px 0; }
+  #viewToggle, #filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  #viewToggle button, #filters button { padding: 8px 16px; font-size: 13px; font-weight: 600; border: 2px solid var(--line); border-radius: 999px; background: #fff; cursor: pointer; color: var(--ink); transition: all .15s; }
+  #viewToggle button:hover, #filters button:hover { border-color: #d1d5db; background: var(--bg-soft); }
+  #viewToggle button.active, #filters button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .segRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; margin: 6px 0; font-size: 14px; font-weight: 500; text-align: left; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: all .15s; }
+  .segRow:hover { background: #eef4ff; border-color: #bfdbfe; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .segDot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; flex: none; }
+  .segEmpty { color: var(--ink-soft); font-size: 14px; padding: 12px 0; }
+  #backBtn { margin: 0 0 12px; }
+  #searchRow { display: flex; gap: 8px; margin: 12px 0; }
   #searchWrap { flex: 1; position: relative; min-width: 0; }
   #searchWrap input { width: 100%; }
-  #suggestions { display: none; position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #ccc; border-top: 0; border-radius: 0 0 6px 6px; max-height: 220px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,.15); }
-  .sugg { padding: 8px 10px; font-size: 14px; cursor: pointer; border-bottom: 1px solid #eee; }
+  #suggestions { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1px solid var(--line); border-radius: 10px; max-height: 240px; overflow-y: auto; z-index: 1000; box-shadow: var(--shadow-md); }
+  .sugg { padding: 10px 14px; font-size: 14px; cursor: pointer; border-bottom: 1px solid var(--bg-soft); }
+  .sugg:last-child { border-bottom: 0; }
   .sugg:hover, .sugg.selected { background: #eef4ff; }
-  #searchRow button { padding: 8px 10px; }
-  #banner { display: none; background: #fff3cd; border: 1px solid #e6c200; padding: 10px 14px; font-size: 13px; }
-  #banner code { background: #fff; padding: 1px 4px; border-radius: 3px; }
-  #loading { padding: 10px 14px; font-size: 13px; color: #555; }
+  #searchRow button { padding: 10px 14px; margin-top: 0; }
+  #banner { display: none; background: #fffbeb; border-bottom: 1px solid #fde68a; padding: 12px 16px; font-size: 13px; color: #92400e; }
+  #banner code { background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a; }
+  #loading { padding: 12px 16px; font-size: 13px; color: var(--ink-soft); }
   @media (max-width: 760px) {
     #main { flex-direction: column; }
     #mapWrap { flex: 1; min-height: 0; }
-    #panel { width: 100%; max-height: 45vh; border-left: 0; border-top: 1px solid #ddd; transition: max-height .3s ease, opacity .25s ease, padding .3s ease; }
+    #panel { width: 100%; max-height: 45vh; border-left: 0; border-top: 1px solid var(--line); transition: max-height .3s ease, opacity .25s ease, padding .3s ease; }
     #panel.collapsed { width: 100%; max-height: 0; padding: 0; opacity: 0; overflow: hidden; border-top-width: 0; }
+    header { padding: 10px 12px; }
+    header h1 { font-size: 17px; }
   }
 </style>
 </head>
@@ -100,14 +136,20 @@
     <div id="map"></div>
     <button class="mapBtn" id="globalBtn" type="button" aria-label="Show settings" title="Show settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h13M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>Settings</button>
     <div id="globalPanel" class="hidden">
-      <div id="viewToggle">
-        <button data-view="sidewalks" class="active">Sidewalks</button>
-        <button data-view="unassessed">Unassessed lines</button>
+      <div class="settingsSection">
+        <h3>Sidewalks</h3>
+        <div id="viewToggle">
+          <button data-view="sidewalks" class="active">Sidewalks</button>
+          <button data-view="unassessed">Unassessed</button>
+        </div>
       </div>
-      <div id="filters">
-        <button data-filter="all" class="active">All</button>
-        <button data-filter="assessed">Assessed</button>
-        <button data-filter="unassessed">Not assessed</button>
+      <div class="settingsSection">
+        <h3>Parcels</h3>
+        <div id="filters">
+          <button data-filter="all" class="active">All</button>
+          <button data-filter="assessed">Assessed</button>
+          <button data-filter="unassessed">Not assessed</button>
+        </div>
       </div>
       <div id="searchRow">
         <div id="searchWrap">
@@ -131,7 +173,7 @@
 <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=15"></script>
-<script src="app.js?v=15"></script>
+<script src="config.js?v=19"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
