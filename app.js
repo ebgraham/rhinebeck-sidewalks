@@ -15,14 +15,14 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 32;
+  var APP_VERSION = 43;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
   // Condition is a 1-4 score: 1 = Damaged (worst) through 4 = Excellent
   // (best). Map colors run red (1) to green (4).
   var CONDITION_COLORS = {
-    0: "#9ca3af",
+    0: "#ffffff",
     1: "#d73027",
     2: "#fdae61",
     3: "#a6d96a",
@@ -76,7 +76,10 @@
     // NOTE: line-cap and line-join are LAYOUT properties in MapLibre, not
     // paint. Putting them in paint fails style validation and the whole
     // layer is rejected (this was the missing-lines bug).
-    map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"], "line-dasharray": ["get", "lineDash"] } });
+    // Gray casing under "No Sidewalk" segments for an outlined look (drawn first = underneath).
+    // Total width matches assessed lines (4px): 4px gray casing with 2px white on top.
+    map.addLayer({ id: "segments-casing", type: "line", source: "segments", filter: ["==", ["get", "isNoSidewalk"], true], layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#6b7280", "line-width": 4 } });
+    map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
     // Invisible wide hit layer for easier tapping (does not affect visual line width).
     map.addLayer({ id: "segments-hit", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#000", "line-opacity": 0, "line-width": 24 } });
     map.on("mouseenter", "segments-hit", function () { map.getCanvas().style.cursor = "pointer"; });
@@ -292,6 +295,7 @@
   // a Settings toggle shows them.
   var showSidewalks = true;
   var showUnassessed = false;
+  var showParcels = true;
   var activeFilter = "all";
   var selectedGrid = null;
   var selectedSegmentId = null;
@@ -370,15 +374,15 @@
   }
 
   // Segment lines: condition color when assessed, gray when not.
-  // Condition 0 (No Sidewalk) renders as a dashed gray line.
   function segmentStyleFor(feature) {
     var a = segAssessments[feature.properties.id];
     var isSelected = feature.properties.id === selectedSegmentId;
-    if (a && CONDITION_COLORS[a.condition]) {
+    if (a && CONDITION_COLORS[a.condition] != null) {
       if (a.condition === 0) {
-        return { color: CONDITION_COLORS[0], width: isSelected ? 5 : 2.5, dash: [4, 4] };
+        // White 2px line on 4px gray casing = outlined, same total width as assessed.
+        return { color: CONDITION_COLORS[0], width: isSelected ? 3 : 2 };
       }
-      return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4, dash: null };
+      return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4 };
     }
     return { color: "#6b7280", width: isSelected ? 5 : 2.5 };
   }
@@ -454,20 +458,23 @@
         .filter(function (f) { return showUnassessed || segAssessments[f.properties.id]; })
         .map(function (f) {
           var s = segmentStyleFor(f);
-          // Use [1,0] for solid (empty array can fail validation); [4,4] for dashed.
-          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width, lineDash: s.dash || [1, 0] });
+          var isNoSidewalk = !!(segAssessments[f.properties.id] && segAssessments[f.properties.id].condition === 0);
+          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width, isNoSidewalk: isNoSidewalk });
           return { type: "Feature", properties: props, geometry: f.geometry };
         });
       map.getSource("segments").setData({ type: "FeatureCollection", features: segFeats });
     }
     if (map.getLayer("parcels-fill")) {
-      map.setLayoutProperty("parcels-fill", "visibility", "visible");
+      map.setLayoutProperty("parcels-fill", "visibility", showParcels ? "visible" : "none");
     }
     if (map.getLayer("parcels-line")) {
-      map.setLayoutProperty("parcels-line", "visibility", "visible");
+      map.setLayoutProperty("parcels-line", "visibility", showParcels ? "visible" : "none");
     }
     if (map.getLayer("segments-line")) {
       map.setLayoutProperty("segments-line", "visibility", showSidewalks ? "visible" : "none");
+    }
+    if (map.getLayer("segments-casing")) {
+      map.setLayoutProperty("segments-casing", "visibility", showSidewalks ? "visible" : "none");
     }
     if (map.getLayer("segments-hit")) {
       map.setLayoutProperty("segments-hit", "visibility", showSidewalks ? "visible" : "none");
@@ -609,17 +616,13 @@
         document.querySelectorAll(".condBox").forEach(function (b) { b.classList.remove("selected"); });
         btn.classList.add("selected");
         saveBtn.disabled = false;
-        // Disable Surface/Issues/Priority when "No Sidewalk" is picked
+        // Disable Surface/Issues when "No Sidewalk" is picked, but keep
+        // Priority Fix and Notes enabled.
         var noSidewalk = selectedCondition === 0;
-        document.querySelectorAll(".optBox").forEach(function (b) {
+        document.querySelectorAll('.optBox[data-name="surface"], .optBox[data-name="issue"]').forEach(function (b) {
           b.classList.toggle("disabled", noSidewalk);
           if (noSidewalk) b.classList.remove("selected");
         });
-        var prio = document.getElementById("priorityBox");
-        if (prio) {
-          prio.classList.toggle("disabled", noSidewalk);
-          if (noSidewalk) prio.classList.remove("checked");
-        }
       });
     });
     document.querySelectorAll(".optBox").forEach(function (btn) {
@@ -879,9 +882,18 @@
 
   document.querySelectorAll("#filters button").forEach(function (btn) {
     btn.addEventListener("click", function () {
+      var f = btn.getAttribute("data-filter");
+      // Clicking the already-active "All" toggles parcel outlines on/off.
+      if (f === "all" && activeFilter === "all") {
+        showParcels = !showParcels;
+        btn.classList.toggle("active", showParcels);
+        renderLayer();
+        return;
+      }
       document.querySelectorAll("#filters button").forEach(function (b) { b.classList.remove("active"); });
       btn.classList.add("active");
-      activeFilter = btn.getAttribute("data-filter");
+      activeFilter = f;
+      if (f === "all") showParcels = true;
       renderLayer();
     });
   });

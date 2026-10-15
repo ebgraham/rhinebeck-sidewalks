@@ -19,7 +19,7 @@
     --shadow-sm: 0 1px 2px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.08);
     --shadow-md: 0 4px 12px rgba(0,0,0,.12);
   }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: #fff; -webkit-font-smoothing: antialiased; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: #fff; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
   header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; background: #fff; }
   #appVersion { display: block; text-align: right; font-size: 11px; color: #9ca3af; margin-top: 2px; }
   header h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
@@ -28,7 +28,7 @@
   #stats b { font-weight: 700; color: var(--ink); }
   .statDiv { width: 1px; height: 16px; background: var(--line); flex: none; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: baseline; }
-  #main { display: flex; height: calc(100vh - 62px); }
+  #main { display: flex; flex: 1; min-height: 0; }
   #mapWrap { flex: 1; min-width: 0; position: relative; }
   #map { width: 100%; height: 100%; }
   .mapBtn { position: absolute; z-index: 1000; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-md); color: var(--ink); display: inline-flex; align-items: center; gap: 6px; transition: background .15s, border-color .15s, transform .1s; }
@@ -119,7 +119,7 @@
   @media (max-width: 760px) {
     #main { flex-direction: column; }
     #mapWrap { flex: 1; min-height: 0; }
-    #panel { width: 100%; max-height: 55vh; border-left: 0; border-top: 1px solid var(--line); transition: max-height .3s ease, opacity .25s ease, padding .3s ease; position: relative; }
+    #panel { width: 100%; max-height: 70vh; border-left: 0; border-top: 1px solid var(--line); transition: max-height .3s ease, opacity .25s ease, padding .3s ease; position: relative; }
     #panel.collapsed { width: 100%; max-height: 0; padding: 0; opacity: 0; overflow: hidden; border-top-width: 0; }
     #panelToggle { width: auto; position: absolute; top: 12px; right: 12px; margin: 0; padding: 6px 10px; font-size: 12px; }
     #parcelPanel h2 { padding-right: 100px; }
@@ -182,8 +182,8 @@
 <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=32"></script>
-<script src="buildings.js?v=32"></script>
-<script src="app.js?v=32"></script>
+<script src="config.js?v=43"></script>
+<script src="buildings.js?v=43"></script>
+<script src="app.js?v=43"></script>
 </body>
 </html>
