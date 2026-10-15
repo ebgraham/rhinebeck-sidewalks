@@ -15,14 +15,14 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 43;
+  var APP_VERSION = 51;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
   // Condition is a 1-4 score: 1 = Damaged (worst) through 4 = Excellent
   // (best). Map colors run red (1) to green (4).
   var CONDITION_COLORS = {
-    0: "#ffffff",
+    0: "#6b7280",
     1: "#d73027",
     2: "#fdae61",
     3: "#a6d96a",
@@ -76,9 +76,6 @@
     // NOTE: line-cap and line-join are LAYOUT properties in MapLibre, not
     // paint. Putting them in paint fails style validation and the whole
     // layer is rejected (this was the missing-lines bug).
-    // Gray casing under "No Sidewalk" segments for an outlined look (drawn first = underneath).
-    // Total width matches assessed lines (4px): 4px gray casing with 2px white on top.
-    map.addLayer({ id: "segments-casing", type: "line", source: "segments", filter: ["==", ["get", "isNoSidewalk"], true], layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#6b7280", "line-width": 4 } });
     map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
     // Invisible wide hit layer for easier tapping (does not affect visual line width).
     map.addLayer({ id: "segments-hit", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#000", "line-opacity": 0, "line-width": 24 } });
@@ -196,14 +193,15 @@
   }
 
   locateBtn.addEventListener("click", function () {
+    // Always zoom to current location; never toggles off.
     if (!locating) {
       startLocating();
-    } else if (following) {
-      stopLocating();
-    } else {
-      following = true;
-      locateBtn.setAttribute("aria-label", "Stop following"); locateBtn.title = "Stop following";
-      locateBtn.classList.add("active");
+    }
+    following = true;
+    locateBtn.setAttribute("aria-label", "Following location"); locateBtn.title = "Following location";
+    locateBtn.classList.add("active");
+    if (userLocation) {
+      map.flyTo({ center: userLocation, zoom: Math.max(map.getZoom(), 17) });
     }
   });
 
@@ -259,6 +257,26 @@
   panelToggle.addEventListener("click", hidePanel);
   showPanelBtn.addEventListener("click", showPanel);
 
+  // Swipe down to dismiss the panel on touch devices. Only triggers when the
+  // panel is scrolled to the top so it doesn't fight with content scrolling.
+  (function () {
+    var startY = null;
+    var panelEl = document.getElementById("panel");
+    panelEl.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 1) startY = e.touches[0].clientY;
+    }, { passive: true });
+    panelEl.addEventListener("touchend", function (e) {
+      if (startY === null) return;
+      var endY = e.changedTouches[0].clientY;
+      var dy = endY - startY;
+      startY = null;
+      // Swipe down > 80px while at the top of the panel = dismiss.
+      if (dy > 80 && panelEl.scrollTop <= 0 && !panelEl.classList.contains("collapsed")) {
+        hidePanel();
+      }
+    }, { passive: true });
+  })();
+
   // Global controls (view toggle, filters, search, export) live in their
   // own pop-out panel so the side panel stays parcel-specific. The
   // Settings button on the map is always visible and toggles it.
@@ -294,7 +312,7 @@
   // and defaults to on. Unassessed segment lines are hidden by default;
   // a Settings toggle shows them.
   var showSidewalks = true;
-  var showUnassessed = false;
+  var sidewalkFilter = "all";
   var showParcels = true;
   var activeFilter = "all";
   var selectedGrid = null;
@@ -378,10 +396,8 @@
     var a = segAssessments[feature.properties.id];
     var isSelected = feature.properties.id === selectedSegmentId;
     if (a && CONDITION_COLORS[a.condition] != null) {
-      if (a.condition === 0) {
-        // White 2px line on 4px gray casing = outlined, same total width as assessed.
-        return { color: CONDITION_COLORS[0], width: isSelected ? 3 : 2 };
-      }
+      // No Sidewalk (0) renders at unassessed width; others at assessed width.
+      if (a.condition === 0) return { color: CONDITION_COLORS[0], width: isSelected ? 5 : 2.5 };
       return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4 };
     }
     return { color: "#6b7280", width: isSelected ? 5 : 2.5 };
@@ -451,15 +467,18 @@
     });
     map.getSource("parcels").setData({ type: "FeatureCollection", features: feats });
     // Segments: visible only when the Sidewalks layer is on, and only
-    // matching the filter. Unassessed lines are hidden unless the
-    // Settings toggle shows them.
+    // matching the filter. Sidewalk filter: all, assessed only, or not assessed only.
     if (map.getSource("segments")) {
       var segFeats = (showSidewalks ? segments.filter(segmentMatchesFilter) : [])
-        .filter(function (f) { return showUnassessed || segAssessments[f.properties.id]; })
+        .filter(function (f) {
+          var assessed = !!segAssessments[f.properties.id];
+          if (sidewalkFilter === "assessed") return assessed;
+          if (sidewalkFilter === "unassessed") return !assessed;
+          return true;
+        })
         .map(function (f) {
           var s = segmentStyleFor(f);
-          var isNoSidewalk = !!(segAssessments[f.properties.id] && segAssessments[f.properties.id].condition === 0);
-          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width, isNoSidewalk: isNoSidewalk });
+          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width });
           return { type: "Feature", properties: props, geometry: f.geometry };
         });
       map.getSource("segments").setData({ type: "FeatureCollection", features: segFeats });
@@ -472,9 +491,6 @@
     }
     if (map.getLayer("segments-line")) {
       map.setLayoutProperty("segments-line", "visibility", showSidewalks ? "visible" : "none");
-    }
-    if (map.getLayer("segments-casing")) {
-      map.setLayoutProperty("segments-casing", "visibility", showSidewalks ? "visible" : "none");
     }
     if (map.getLayer("segments-hit")) {
       map.setLayoutProperty("segments-hit", "visibility", showSidewalks ? "visible" : "none");
@@ -532,8 +548,8 @@
       var status;
       if (sa && sa.condition === 0) {
         status = '<span class="segDot" style="background:' + CONDITION_COLORS[0] + '"></span>No Sidewalk';
-      } else if (sa && CONDITION_COLORS[sa.condition]) {
-        status = '<span class="segDot" style="background:' + CONDITION_COLORS[sa.condition] + '"></span>Condition ' + sa.condition;
+      } else if (sa && CONDITION_COLORS[sa.condition] != null) {
+        status = '<span class="segDot" style="background:' + CONDITION_COLORS[sa.condition] + '"></span>' + CONDITION_LABELS[sa.condition];
       } else {
         status = '<span class="segDot" style="background:#4b5563"></span>Not Assessed';
       }
@@ -919,13 +935,19 @@
 
   document.querySelectorAll("#viewToggle button").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      if (btn.getAttribute("data-view") === "unassessed") {
-        showUnassessed = !showUnassessed;
-        btn.classList.toggle("active", showUnassessed);
+      var v = btn.getAttribute("data-view");
+      // Clicking the already-active filter toggles the sidewalk layer on/off.
+      if (v === sidewalkFilter) {
+        showSidewalks = !showSidewalks;
+        btn.classList.toggle("active", showSidewalks);
         renderLayer();
-      } else {
-        setLayer("sidewalks", !showSidewalks);
+        return;
       }
+      document.querySelectorAll("#viewToggle button").forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      sidewalkFilter = v;
+      showSidewalks = true;
+      renderLayer();
     });
   });
 
@@ -1014,4 +1036,176 @@
     .catch(function (err) {
       loadingEl.textContent = "Could not load parcels from Supabase (" + err.message + "). Check the key in config.js and that the parcels table exists.";
     });
+  // Analytics dashboard
+  document.getElementById("analyticsBtn").addEventListener("click", function () {
+    renderAnalytics();
+    document.getElementById("analyticsPanel").classList.remove("hidden");
+  });
+  document.getElementById("analyticsClose").addEventListener("click", function () {
+    document.getElementById("analyticsPanel").classList.add("hidden");
+  });
+
+  function renderAnalytics() {
+    var body = document.getElementById("analyticsBody");
+    var total = segments.length;
+    var assessedIds = Object.keys(segAssessments);
+    var assessed = assessedIds.length;
+    var pct = total ? Math.round(assessed / total * 100) : 0;
+
+    // Breakdowns
+    var byCond = { 1: 0, 2: 0, 3: 0, 4: 0 }; // exclude No Sidewalk (0) from pie
+    var bySurface = {};
+    var byIssue = {};
+    var priorityList = [];
+    // For cross-tabs: surface -> {total, sumCond, issues:{}}
+    var surfStats = {};
+    assessedIds.forEach(function (id) {
+      var a = segAssessments[id];
+      var seg = segmentById[id];
+      if (a.condition >= 1 && a.condition <= 4) byCond[a.condition]++;
+      (a.surface || []).forEach(function (s) {
+        bySurface[s] = (bySurface[s] || 0) + 1;
+        if (!surfStats[s]) surfStats[s] = { count: 0, sumCond: 0, issues: {} };
+        surfStats[s].count++;
+        if (a.condition >= 1) surfStats[s].sumCond += a.condition;
+      });
+      (a.issues || []).forEach(function (i) {
+        byIssue[i] = (byIssue[i] || 0) + 1;
+        (a.surface || []).forEach(function (s) {
+          if (!surfStats[s]) surfStats[s] = { count: 0, sumCond: 0, issues: {} };
+          surfStats[s].issues[i] = (surfStats[s].issues[i] || 0) + 1;
+        });
+      });
+      if (a.priority_fix) {
+        var addr = "", parcelId = "";
+        if (seg) {
+          parcelId = seg.properties.parcelgrid || "";
+          for (var pi = 0; pi < parcels.length; pi++) {
+            if (parcels[pi].properties.parcelgrid === parcelId) {
+              addr = parcels[pi].properties.address || parcels[pi].properties.printkey || "";
+              break;
+            }
+          }
+        }
+        priorityList.push({ id: id, address: addr, parcel: parcelId, street: seg ? seg.properties.street_name : "", condition: a.condition });
+      }
+    });
+    // Sort priority by worst condition first
+    priorityList.sort(function (a, b) { return a.condition - b.condition; });
+
+    var html = '<div class="metricGrid">';
+    html += metricCard(assessed, "Assessed");
+    html += metricCard(total - assessed, "Not Assessed");
+    html += metricCard(pct + "%", "Coverage");
+    html += metricCard(priorityList.length, "Priority Fixes");
+    html += '</div>';
+
+    // Pie charts row
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">';
+    html += '<div class="chartSection"><h3>Sidewalk Condition</h3>' + pieChart(byCond, CONDITION_COLORS, CONDITION_LABELS) + '</div>';
+    html += '<div class="chartSection"><h3>Surface Breakdown</h3>' + pieChart(bySurface, null, null) + '</div>';
+    html += '</div>';
+
+    // Issues bar chart
+    html += '<div class="chartSection"><h3>Issues</h3>';
+    var issueKeys = Object.keys(byIssue).sort(function (a, b) { return byIssue[b] - byIssue[a]; });
+    var maxIssue = Math.max.apply(null, [1].concat(issueKeys.map(function (k) { return byIssue[k]; })));
+    issueKeys.forEach(function (i) {
+      html += barRow(i, byIssue[i], maxIssue, "#fbbf24");
+    });
+    if (!issueKeys.length) html += '<p style="color:var(--ink-soft);font-size:13px;">No issue data yet.</p>';
+    html += '</div>';
+
+    // Avg condition by surface
+    html += '<div class="chartSection"><h3>Average Condition by Surface</h3>';
+    var surfAvgs = Object.keys(surfStats).map(function (s) {
+      var st = surfStats[s];
+      return { surface: s, avg: st.count ? (st.sumCond / st.count) : 0, count: st.count };
+    }).sort(function (a, b) { return b.avg - a.avg; });
+    surfAvgs.forEach(function (r) {
+      var w = Math.round(r.avg / 4 * 100);
+      html += '<div class="barRow"><div class="barLbl">' + escapeHtml(r.surface) + '</div>' +
+        '<div class="barTrack"><div class="barFill" style="width:' + w + '%;background:#a6d96a;"></div></div>' +
+        '<div class="barVal">' + r.avg.toFixed(1) + '</div></div>';
+    });
+    if (!surfAvgs.length) html += '<p style="color:var(--ink-soft);font-size:13px;">No data yet.</p>';
+    html += '</div>';
+
+    // Issues by surface
+    html += '<div class="chartSection"><h3>Top Issue by Surface</h3>';
+    html += '<table style="width:100%;font-size:13px;border-collapse:collapse;">';
+    html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th>Surface</th><th>Most Common Issue</th><th>Count</th></tr>';
+    Object.keys(surfStats).sort().forEach(function (s) {
+      var issues = surfStats[s].issues;
+      var topIssue = "-", topCount = 0;
+      Object.keys(issues).forEach(function (i) {
+        if (issues[i] > topCount) { topCount = issues[i]; topIssue = i; }
+      });
+      html += '<tr style="border-bottom:1px solid var(--line);"><td>' + escapeHtml(s) + '</td><td>' + escapeHtml(topIssue) + '</td><td>' + topCount + '</td></tr>';
+    });
+    html += '</table></div>';
+
+    // Priority fixes list
+    html += '<div class="chartSection"><h3>Priority Fixes (' + priorityList.length + ')</h3>';
+    if (priorityList.length) {
+      html += '<table style="width:100%;font-size:13px;border-collapse:collapse;">';
+      html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th></th><th>Address</th><th>Parcel</th><th>Street</th><th>Condition</th></tr>';
+      priorityList.forEach(function (r) {
+        html += '<tr style="border-bottom:1px solid var(--line);"><td><button type="button" class="gotoBtn" data-grid="' + escapeHtml(r.parcel) + '" style="padding:4px 10px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;">Go</button></td><td>' + escapeHtml(r.address) + '</td><td style="font-family:monospace;font-size:11px;">' + escapeHtml(r.parcel) + '</td><td>' + escapeHtml(r.street) + '</td><td><span class="segDot" style="background:' + CONDITION_COLORS[r.condition] + '"></span>' + CONDITION_LABELS[r.condition] + '</td></tr>';
+      });
+      html += '</table>';
+    } else {
+      html += '<p style="color:var(--ink-soft);font-size:13px;">No priority fixes flagged yet.</p>';
+    }
+    html += '</div>';
+
+    body.innerHTML = html;
+
+    // Wire up the Go buttons: close analytics, select the parcel (zooms to it).
+    body.querySelectorAll(".gotoBtn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var grid = btn.getAttribute("data-grid");
+        document.getElementById("analyticsPanel").classList.add("hidden");
+        if (grid) selectParcel(grid);
+      });
+    });
+  }
+
+  function pieChart(data, colors, labels) {
+    var keys = Object.keys(data).filter(function (k) { return data[k] > 0; });
+    var total = keys.reduce(function (sum, k) { return sum + data[k]; }, 0);
+    if (!total) return '<p style="color:var(--ink-soft);font-size:13px;">No data yet.</p>';
+    var defaultColors = ["#60a5fa", "#a78bfa", "#f472b6", "#fb923c", "#a3e635", "#2dd4bf"];
+    var cx = 80, cy = 80, r = 70;
+    var angle = -Math.PI / 2;
+    var svg = '<svg width="160" height="160" viewBox="0 0 160 160">';
+    var legend = '<div style="font-size:13px;">';
+    keys.forEach(function (k, i) {
+      var frac = data[k] / total;
+      var a1 = angle, a2 = angle + frac * Math.PI * 2;
+      var large = (a2 - a1) > Math.PI ? 1 : 0;
+      var x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      var x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+      var color = colors ? colors[k] : defaultColors[i % defaultColors.length];
+      var label = labels ? labels[k] : k;
+      svg += '<path d="M' + cx + ',' + cy + ' L' + x1.toFixed(1) + ',' + y1.toFixed(1) + ' A' + r + ',' + r + ' 0 ' + large + ',1 ' + x2.toFixed(1) + ',' + y2.toFixed(1) + ' Z" fill="' + color + '" stroke="#fff" stroke-width="2"/>';
+      legend += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="width:12px;height:12px;border-radius:3px;background:' + color + ';flex:none;"></span>' + escapeHtml(label) + ' — ' + data[k] + ' (' + Math.round(frac * 100) + '%)</div>';
+      angle = a2;
+    });
+    svg += '</svg>';
+    legend += '</div>';
+    return '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">' + svg + legend + '</div>';
+  }
+
+  function metricCard(num, lbl) {
+    return '<div class="metricCard"><div class="num">' + num + '</div><div class="lbl">' + lbl + '</div></div>';
+  }
+
+  function barRow(label, val, max, color) {
+    var w = Math.round(val / max * 100);
+    return '<div class="barRow"><div class="barLbl">' + escapeHtml(label) + '</div>' +
+      '<div class="barTrack"><div class="barFill" style="width:' + w + '%;background:' + color + ';"></div></div>' +
+      '<div class="barVal">' + val + '</div></div>';
+  }
+
 })();
