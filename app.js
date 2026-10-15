@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 79;
+  var APP_VERSION = 80;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -656,7 +656,7 @@
     backBtnEl.type = "button";
     backBtnEl.className = "btn secondary";
     backBtnEl.id = "backBtn";
-    backBtnEl.textContent = "\u2190 All sidewalks on parcel";
+    backBtnEl.innerHTML = "\u2190 <span class=\"backFull\">All sidewalks on parcel</span><span class=\"backShort\">Parcel</span>";
     panelHeader.insertBefore(backBtnEl, panelHeader.firstChild);
     backBtnEl.addEventListener("click", function () {
       guardUnsavedChanges(function () { selectParcel(grid); });

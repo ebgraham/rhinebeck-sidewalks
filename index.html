@@ -48,6 +48,11 @@
   #panelHeader { display: flex; gap: 8px; margin: 0 0 12px; align-items: stretch; }
   #panelHeader .btn { margin: 0; padding: 8px 12px; font-size: 13px; white-space: nowrap; }
   #backBtn { flex: 1; }
+  #backBtn .backShort { display: none; }
+  @media (max-width: 760px) {
+    #backBtn .backFull { display: none; }
+    #backBtn .backShort { display: inline; }
+  }
   /* Sticky form actions: Save stays visible while scrolling the form. */
   .formActions { position: sticky; bottom: -16px; background: #fff; margin: 16px -16px 0; padding: 12px 16px; border-top: 1px solid transparent; display: flex; gap: 8px; align-items: center; }
   #panel.hasMoreBelow .formActions { border-top-color: var(--line); box-shadow: 0 -12px 16px -12px rgba(0,0,0,0.3); }
@@ -254,8 +259,8 @@
 </div>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=79"></script>
-<script src="buildings.js?v=79"></script>
-<script src="app.js?v=79"></script>
+<script src="config.js?v=80"></script>
+<script src="buildings.js?v=80"></script>
+<script src="app.js?v=80"></script>
 </body>
 </html>
