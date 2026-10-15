@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 59;
+  var APP_VERSION = 60;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -401,12 +401,6 @@
     return { color: "#6b7280", width: isSelected ? 5 : 2.5 };
   }
 
-  function segmentMatchesFilter(seg) {
-    var has = !!segAssessments[seg.properties.id];
-    if (has) return pShowAssessed;
-    return pShowUnassessed;
-  }
-
   function renderStats() {
     var counts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
     var assessed = 0;
@@ -464,9 +458,10 @@
     });
     map.getSource("parcels").setData({ type: "FeatureCollection", features: feats });
     // Segments: visible only when the Sidewalks layer is on, and only
-    // matching the filter. Sidewalk checkboxes: Assessed / Not Assessed.
+    // Sidewalk visibility is independent of parcel visibility.
+    // Sidewalk checkboxes: Assessed / Not Assessed.
     if (map.getSource("segments")) {
-      var segFeats = (showSidewalks ? segments.filter(segmentMatchesFilter) : [])
+      var segFeats = (showSidewalks ? segments : [])
         .filter(function (f) {
           var assessed = !!segAssessments[f.properties.id];
           if (assessed) return swShowAssessed;
