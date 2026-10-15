@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 60;
+  var APP_VERSION = 79;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -88,11 +88,17 @@
     // a line tap — the parcel handler defers when the tap also hits a
     // sidewalk line, so the line wins.
     map.on("click", "segments-hit", function (e) {
-      if (e.features && e.features.length) selectSegment(e.features[0].properties.id);
+      if (e.features && e.features.length) {
+        var sid = e.features[0].properties.id;
+        guardUnsavedChanges(function () { selectSegment(sid); });
+      }
     });
     map.on("click", "parcels-fill", function (e) {
       if (map.queryRenderedFeatures(e.point, { layers: ["segments-hit"] }).length) return;
-      if (e.features && e.features.length) selectParcel(e.features[0].properties.parcelgrid);
+      if (e.features && e.features.length) {
+        var grid = e.features[0].properties.parcelgrid;
+        guardUnsavedChanges(function () { selectParcel(grid); });
+      }
     });
     // Tapping empty map (no parcel, no segment) dismisses the selection
     // and hides the panel.
@@ -240,9 +246,39 @@
     if (panel.classList.contains("collapsed")) panel.classList.add("hidden");
     map.resize();
   });
-  function hidePanel() {
+  var pendingDismissAction = null; // action to run after save/discard in unsaved dialog
+
+  function doHidePanel() {
     panel.classList.add("collapsed");
     syncMapDuringTransition();
+  }
+  function hidePanel() {
+    // Intercept dismissal when the assessment form has unsaved changes.
+    if (hasUnsavedChanges()) {
+      pendingDismissAction = doHidePanel;
+      showUnsavedDialog();
+      return;
+    }
+    doHidePanel();
+  }
+  function showUnsavedDialog() {
+    var dlg = document.getElementById("unsavedDialog");
+    if (dlg) dlg.hidden = false;
+  }
+  function hideUnsavedDialog() {
+    var dlg = document.getElementById("unsavedDialog");
+    if (dlg) dlg.hidden = true;
+  }
+  // Run proceed() immediately, or prompt to save/discard first when the
+  // assessment form is dirty. Used for any navigation that would replace
+  // the form (tapping another parcel/segment, search, Go button).
+  function guardUnsavedChanges(proceed) {
+    if (hasUnsavedChanges()) {
+      pendingDismissAction = proceed;
+      showUnsavedDialog();
+      return;
+    }
+    proceed();
   }
   function showPanel() {
     panel.classList.remove("hidden");
@@ -252,6 +288,35 @@
     syncMapDuringTransition();
   }
   panelToggle.addEventListener("click", hidePanel);
+
+  // Toggle the "more below" indicator on the sticky form actions: show the
+  // shadow/gradient while there's unscrolled content below, hide at the end.
+  function updateScrollFade() {
+    var hasMore = panel.scrollHeight - panel.scrollTop - panel.clientHeight > 12;
+    panel.classList.toggle("hasMoreBelow", hasMore);
+  }
+  panel.addEventListener("scroll", updateScrollFade, { passive: true });
+  // Re-check after the form renders or the panel resizes.
+  new ResizeObserver(updateScrollFade).observe(panel);
+
+  // Unsaved-changes dialog buttons.
+  document.getElementById("unsavedCloseBtn").addEventListener("click", function () {
+    hideUnsavedDialog();
+    pendingDismissAction = null; // stay on the form, keep changes
+  });
+  document.getElementById("discardChangesBtn").addEventListener("click", function () {
+    hideUnsavedDialog();
+    formBaseline = null; // don't re-prompt
+    var act = pendingDismissAction;
+    pendingDismissAction = null;
+    if (act) act();
+  });
+  document.getElementById("saveChangesBtn").addEventListener("click", function () {
+    hideUnsavedDialog();
+    var sb = document.getElementById("saveBtn");
+    if (sb) sb.click();
+    // pendingDismissAction runs after the save completes.
+  });
 
   // Swipe down to dismiss the panel on touch devices. Only triggers when the
   // panel is scrolled to the top so it doesn't fight with content scrolling.
@@ -316,6 +381,7 @@
   var selectedGrid = null;
   var selectedSegmentId = null;
   var selectedCondition = null; // condition picked in the form (1-5), null = none
+  var formBaseline = null; // saved form state for unsaved-changes detection
 
   var statsEl = document.getElementById("stats");
   var panelEl = document.getElementById("parcelPanel");
@@ -522,6 +588,9 @@
   function selectParcel(grid) {
     selectedGrid = grid;
     selectedSegmentId = null;
+    // Remove back button when showing parcel list
+    var oldBack = document.getElementById("backBtn");
+    if (oldBack) oldBack.remove();
     if (panel.classList.contains("hidden")) showPanel();
     if (typeof closeSuggestions === "function") closeSuggestions();
     renderLayer();
@@ -556,7 +625,8 @@
       listHtml;
     panelEl.querySelectorAll(".segRow").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        selectSegment(parseInt(btn.getAttribute("data-segment"), 10));
+        var sid = parseInt(btn.getAttribute("data-segment"), 10);
+        guardUnsavedChanges(function () { selectSegment(sid); });
       });
     });
     // Zoom to the parcel.
@@ -578,8 +648,20 @@
       if (parcels[i].properties.parcelgrid === grid) { parcelProps = parcels[i].properties; break; }
     }
     var a = segAssessments[id] || {};
+    // Back button goes in the header next to Hide
+    var panelHeader = document.getElementById("panelHeader");
+    var oldBack = document.getElementById("backBtn");
+    if (oldBack) oldBack.remove();
+    var backBtnEl = document.createElement("button");
+    backBtnEl.type = "button";
+    backBtnEl.className = "btn secondary";
+    backBtnEl.id = "backBtn";
+    backBtnEl.textContent = "\u2190 All sidewalks on parcel";
+    panelHeader.insertBefore(backBtnEl, panelHeader.firstChild);
+    backBtnEl.addEventListener("click", function () {
+      guardUnsavedChanges(function () { selectParcel(grid); });
+    });
     panelEl.innerHTML =
-      '<button type="button" class="btn secondary" id="backBtn">\u2190 All sidewalks on this parcel</button>' +
       "<h2>" + escapeHtml((parcelProps && parcelProps.address) || "No address on file") + "</h2>" +
       '<div class="meta">Sidewalk on ' + escapeHtml(seg.properties.street_name) +
       "<br>Parcel: " + escapeHtml((parcelProps && parcelProps.printkey) || grid) + "</div>" +
@@ -602,19 +684,21 @@
       "</div>" +
       '<label for="notesInput">Notes</label>' +
       '<textarea id="notesInput" placeholder="sidewalk notes ..."></textarea>' +
-      '<button class="btn" id="saveBtn" type="button">Save assessment</button> ' +
-      '<button class="btn secondary" id="clearBtn" type="button">Clear</button>' +
-      '<div id="saveStatus"></div>';
+      '<button class="btn danger-outline clearFlowBtn" id="clearBtnFlow" type="button">Clear Assessment</button>' +
+      '<div class="formActions">' +
+      '<button class="btn" id="saveBtn" type="button">Save</button> ' +
+      '<button class="btn danger-outline clearFooterBtn" id="clearBtn" type="button">Clear</button>' +
+      '<div id="saveStatus"></div>' +
+      '</div>';
     document.getElementById("notesInput").value = a.notes || "";
-    document.getElementById("backBtn").addEventListener("click", function () {
-      selectParcel(grid);
-    });
     var saveBtn = document.getElementById("saveBtn");
     // Condition starts at the saved value (if any); Save stays disabled
     // until a box is picked.
     var condNum = Number(a.condition);
     selectedCondition = (condNum >= 0 && condNum <= 4) ? condNum : null;
     saveBtn.disabled = selectedCondition === null;
+    captureFormBaseline(a);
+    updateScrollFade();
     document.querySelectorAll(".condBox").forEach(function (btn) {
       btn.addEventListener("click", function () {
         selectedCondition = parseInt(btn.getAttribute("data-condition"), 10);
@@ -649,13 +733,16 @@
       var notes = document.getElementById("notesInput").value.trim();
       saveAssessment(id, selectedCondition, surface, issues, priorityFix, notes);
     });
-    document.getElementById("clearBtn").addEventListener("click", function () {
-      if (segAssessments[id]) {
-        // Destructive: confirm before deleting the saved assessment.
-        if (confirm("Clear the saved assessment for this sidewalk?")) saveAssessment(id, null);
-      } else {
-        resetForm();
-      }
+    ["clearBtn", "clearBtnFlow"].forEach(function (btnId) {
+      var cb = document.getElementById(btnId);
+      if (cb) cb.addEventListener("click", function () {
+        if (segAssessments[id]) {
+          // Destructive: confirm before deleting the saved assessment.
+          if (confirm("Clear the saved assessment for this sidewalk?")) saveAssessment(id, null);
+        } else {
+          resetForm();
+        }
+      });
     });
     // Zoom to the segment.
     map.fitBounds(boundsOfFeatures([seg]), { padding: 60, maxZoom: 19 });
@@ -698,6 +785,46 @@
     if (sb) sb.disabled = true;
   }
 
+  // Read the current form values as a comparable object.
+  function getFormState() {
+    var notesEl = document.getElementById("notesInput");
+    var priEl = document.getElementById("priorityBox");
+    return {
+      condition: selectedCondition,
+      surface: selectedValues("surface").slice().sort(),
+      issues: selectedValues("issue").slice().sort(),
+      priority: priEl ? priEl.classList.contains("checked") : false,
+      notes: notesEl ? notesEl.value.trim() : ""
+    };
+  }
+
+  // Snapshot the saved assessment as the baseline for dirty-checking.
+  function captureFormBaseline(a) {
+    a = a || {};
+    formBaseline = {
+      condition: (a.condition >= 0 && a.condition <= 4) ? Number(a.condition) : null,
+      surface: (a.surface || []).slice().sort(),
+      issues: (a.issues || []).slice().sort(),
+      priority: !!a.priority_fix,
+      notes: (a.notes || "").trim()
+    };
+  }
+
+  function statesEqual(x, y) {
+    return x.condition === y.condition &&
+      x.priority === y.priority &&
+      x.notes === y.notes &&
+      JSON.stringify(x.surface) === JSON.stringify(y.surface) &&
+      JSON.stringify(x.issues) === JSON.stringify(y.issues);
+  }
+
+  // True when the assessment form is visible and differs from the baseline.
+  function hasUnsavedChanges() {
+    if (!formBaseline || !document.getElementById("saveBtn")) return false;
+    if (panel.classList.contains("collapsed")) return false;
+    return !statesEqual(getFormState(), formBaseline);
+  }
+
   function saveAssessment(segmentId, condition, surface, issues, priorityFix, notes) {
     if (condition === null || condition === undefined) {
       // Clearing: delete from Supabase if saving is on, else drop local copy.
@@ -711,6 +838,7 @@
           saveLocalAssessments();
           renderLayer();
           resetForm();
+          captureFormBaseline({});
           setStatus("Assessment cleared.", "ok");
         }).catch(function () {
           setStatus("Could not clear in Supabase. The record may still exist.", "err");
@@ -720,6 +848,7 @@
         saveLocalAssessments();
         renderLayer();
         resetForm();
+        captureFormBaseline({});
         setStatus("Assessment cleared (was stored locally).", "ok");
       }
       return;
@@ -748,18 +877,36 @@
         // Back to the parcel page: the segment list shows the updated
         // condition for this sidewalk, which confirms the save.
         var seg = segmentById[segmentId];
-        if (seg) selectParcel(seg.properties.parcelgrid);
+        if (pendingDismissAction) {
+          var act = pendingDismissAction;
+          pendingDismissAction = null;
+          act();
+        } else if (seg) selectParcel(seg.properties.parcelgrid);
       }).catch(function () {
         segAssessments[segmentId] = Object.assign({}, record, { source: "local" });
         saveLocalAssessments();
         renderLayer();
-        setStatus("Saved locally only — Supabase write failed.", "warn");
+        captureFormBaseline(record);
+        if (pendingDismissAction) {
+          var act2 = pendingDismissAction;
+          pendingDismissAction = null;
+          act2();
+        } else {
+          setStatus("Saved locally only — Supabase write failed.", "warn");
+        }
       });
     } else {
       segAssessments[segmentId] = Object.assign({}, record, { source: "local" });
       saveLocalAssessments();
       renderLayer();
-      setStatus("Saved locally. Run the segments SQL to enable Supabase saving (see README).", "warn");
+      captureFormBaseline(record);
+      if (pendingDismissAction) {
+        var act3 = pendingDismissAction;
+        pendingDismissAction = null;
+        act3();
+      } else {
+        setStatus("Saved locally. Run the segments SQL to enable Supabase saving (see README).", "warn");
+      }
     }
   }
 
@@ -840,7 +987,7 @@
         ev.preventDefault(); // fire before the input loses focus
         searchInput.value = m.label;
         closeSuggestions();
-        selectParcel(m.grid);
+        guardUnsavedChanges(function () { selectParcel(m.grid); });
       });
       suggEl.appendChild(div);
     });
@@ -863,7 +1010,7 @@
       var m = currentMatches[suggIndex];
       searchInput.value = m.label;
       closeSuggestions();
-      selectParcel(m.grid);
+      guardUnsavedChanges(function () { selectParcel(m.grid); });
     }
   });
 
@@ -878,7 +1025,7 @@
     for (var i = 0; i < parcels.length; i++) {
       var p = parcels[i].properties;
       if (normalizeSearch(p.printkey).indexOf(q) !== -1 || normalizeSearch(p.parcelgrid).indexOf(q) !== -1 || normalizeSearch(p.address).indexOf(q) !== -1 || normalizeSearch(p.addresses).indexOf(q) !== -1) {
-        selectParcel(p.parcelgrid);
+        guardUnsavedChanges(function () { selectParcel(p.parcelgrid); });
         return;
       }
     }
@@ -1103,7 +1250,8 @@
 
     // Issues by surface
     html += '<div class="chartSection"><h3>Top Issue by Surface</h3>';
-    html += '<table style="width:100%;font-size:13px;border-collapse:collapse;">';
+    html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
+    html += '<table style="width:100%;min-width:320px;font-size:13px;border-collapse:collapse;">';
     html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th style="padding:8px;">Surface</th><th style="padding:8px;">Most Common Issue</th><th style="padding:8px;">Count</th></tr>';
     Object.keys(surfStats).sort().forEach(function (s) {
       var issues = surfStats[s].issues;
@@ -1111,19 +1259,20 @@
       Object.keys(issues).forEach(function (i) {
         if (issues[i] > topCount) { topCount = issues[i]; topIssue = i; }
       });
-      html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px;">' + escapeHtml(s) + '</td><td style="padding:8px;">' + escapeHtml(topIssue) + '</td><td style="padding:8px;">' + topCount + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px;white-space:nowrap;">' + escapeHtml(s) + '</td><td style="padding:8px;white-space:nowrap;">' + escapeHtml(topIssue) + '</td><td style="padding:8px;">' + topCount + '</td></tr>';
     });
-    html += '</table></div>';
+    html += '</table></div></div>';
 
     // Priority fixes list
     html += '<div class="chartSection"><h3>Priority Fixes (' + priorityList.length + ')</h3>';
     if (priorityList.length) {
-      html += '<table style="width:100%;font-size:13px;border-collapse:collapse;table-layout:fixed;">';
+      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">';
+      html += '<table style="width:100%;min-width:520px;font-size:13px;border-collapse:collapse;table-layout:fixed;">';
       html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th style="padding:8px;width:52px;"></th><th style="padding:8px;">Address</th><th style="padding:8px;">Parcel</th><th style="padding:8px;">Street</th><th style="padding:8px;">Condition</th></tr>';
       priorityList.forEach(function (r) {
-        html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px 4px;"><button type="button" class="gotoBtn" data-grid="' + escapeHtml(r.parcel) + '" style="padding:6px 14px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;white-space:nowrap;">Go</button></td><td style="padding:8px;white-space:nowrap;">' + escapeHtml(r.address) + '</td><td style="padding:8px;font-family:monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(r.parcel) + '">' + escapeHtml(r.parcel) + '</td><td style="padding:8px;white-space:nowrap;">' + escapeHtml(r.street) + '</td><td style="padding:8px;white-space:nowrap;"><span class="segDot" style="background:' + CONDITION_COLORS[r.condition] + '"></span>' + CONDITION_LABELS[r.condition] + '</td></tr>';
+        html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px 4px;"><button type="button" class="gotoBtn" data-grid="' + escapeHtml(r.parcel) + '" style="padding:6px 14px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;white-space:nowrap;">Go</button></td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(r.address) + '">' + escapeHtml(r.address) + '</td><td style="padding:8px;font-family:monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(r.parcel) + '">' + escapeHtml(r.parcel) + '</td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(r.street) + '">' + escapeHtml(r.street) + '</td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + '<span class="segDot" style="background:' + CONDITION_COLORS[r.condition] + '"></span>' + CONDITION_LABELS[r.condition] + '</td></tr>';
       });
-      html += '</table>';
+      html += '</table></div>';
     } else {
       html += '<p style="color:var(--ink-soft);font-size:13px;">No priority fixes flagged yet.</p>';
     }
@@ -1136,7 +1285,7 @@
       btn.addEventListener("click", function () {
         var grid = btn.getAttribute("data-grid");
         document.getElementById("analyticsPanel").classList.add("hidden");
-        if (grid) selectParcel(grid);
+        if (grid) guardUnsavedChanges(function () { selectParcel(grid); });
       });
     });
   }
