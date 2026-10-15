@@ -15,7 +15,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 51;
+  var APP_VERSION = 59;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -114,7 +114,6 @@
   // GPS: locate the user and optionally follow them (phone-friendly).
   // Geolocation needs HTTPS and the user's permission.
   var locateBtn = document.getElementById("locateBtn");
-  var showPanelBtn = document.getElementById("showPanelBtn");
   var panel = document.getElementById("panel");
   var panelToggle = document.getElementById("panelToggle");
   var locMarker = null;
@@ -243,7 +242,6 @@
   });
   function hidePanel() {
     panel.classList.add("collapsed");
-    showPanelBtn.style.display = "block";
     syncMapDuringTransition();
   }
   function showPanel() {
@@ -251,11 +249,9 @@
     // Force a reflow so the slide-in animates instead of snapping.
     void panel.offsetWidth;
     panel.classList.remove("collapsed");
-    showPanelBtn.style.display = "none";
     syncMapDuringTransition();
   }
   panelToggle.addEventListener("click", hidePanel);
-  showPanelBtn.addEventListener("click", showPanel);
 
   // Swipe down to dismiss the panel on touch devices. Only triggers when the
   // panel is scrolled to the top so it doesn't fight with content scrolling.
@@ -312,9 +308,11 @@
   // and defaults to on. Unassessed segment lines are hidden by default;
   // a Settings toggle shows them.
   var showSidewalks = true;
-  var sidewalkFilter = "all";
+  var swShowAssessed = true;
+  var swShowUnassessed = true;
   var showParcels = true;
-  var activeFilter = "all";
+  var pShowAssessed = true;
+  var pShowUnassessed = true;
   var selectedGrid = null;
   var selectedSegmentId = null;
   var selectedCondition = null; // condition picked in the form (1-5), null = none
@@ -405,9 +403,8 @@
 
   function segmentMatchesFilter(seg) {
     var has = !!segAssessments[seg.properties.id];
-    if (activeFilter === "assessed") return has;
-    if (activeFilter === "unassessed") return !has;
-    return true;
+    if (has) return pShowAssessed;
+    return pShowUnassessed;
   }
 
   function renderStats() {
@@ -442,9 +439,9 @@
   function visibleFeatures() {
     return parcels.filter(function (f) {
       var segs = segmentsByParcel[f.properties.parcelgrid] || [];
-      if (activeFilter === "assessed") return segs.some(function (s) { return !!segAssessments[s.properties.id]; });
-      if (activeFilter === "unassessed") return !segs.some(function (s) { return !!segAssessments[s.properties.id]; });
-      return true;
+      var hasAssessed = segs.some(function (s) { return !!segAssessments[s.properties.id]; });
+      if (hasAssessed) return pShowAssessed;
+      return pShowUnassessed;
     });
   }
 
@@ -467,14 +464,13 @@
     });
     map.getSource("parcels").setData({ type: "FeatureCollection", features: feats });
     // Segments: visible only when the Sidewalks layer is on, and only
-    // matching the filter. Sidewalk filter: all, assessed only, or not assessed only.
+    // matching the filter. Sidewalk checkboxes: Assessed / Not Assessed.
     if (map.getSource("segments")) {
       var segFeats = (showSidewalks ? segments.filter(segmentMatchesFilter) : [])
         .filter(function (f) {
           var assessed = !!segAssessments[f.properties.id];
-          if (sidewalkFilter === "assessed") return assessed;
-          if (sidewalkFilter === "unassessed") return !assessed;
-          return true;
+          if (assessed) return swShowAssessed;
+          return swShowUnassessed;
         })
         .map(function (f) {
           var s = segmentStyleFor(f);
@@ -506,8 +502,6 @@
     if (which !== "sidewalks") return;
     if (on && !segmentsLoaded) return;
     showSidewalks = on;
-    var sb = document.querySelector('#viewToggle button[data-view="sidewalks"]');
-    if (sb) sb.classList.toggle("active", showSidewalks);
     renderLayer();
   }
 
@@ -896,24 +890,6 @@
     alert("No parcel matches that ID or address.");
   });
 
-  document.querySelectorAll("#filters button").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var f = btn.getAttribute("data-filter");
-      // Clicking the already-active "All" toggles parcel outlines on/off.
-      if (f === "all" && activeFilter === "all") {
-        showParcels = !showParcels;
-        btn.classList.toggle("active", showParcels);
-        renderLayer();
-        return;
-      }
-      document.querySelectorAll("#filters button").forEach(function (b) { b.classList.remove("active"); });
-      btn.classList.add("active");
-      activeFilter = f;
-      if (f === "all") showParcels = true;
-      renderLayer();
-    });
-  });
-
   document.getElementById("exportBtn").addEventListener("click", function () {
     var lines = ["segment_id,parcelgrid,printkey,address,street_name,condition,surface,issues,priority_fix,notes,assessed_at,source"];
     var byGrid = {};
@@ -933,22 +909,23 @@
     URL.revokeObjectURL(a.href);
   });
 
-  document.querySelectorAll("#viewToggle button").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var v = btn.getAttribute("data-view");
-      // Clicking the already-active filter toggles the sidewalk layer on/off.
-      if (v === sidewalkFilter) {
-        showSidewalks = !showSidewalks;
-        btn.classList.toggle("active", showSidewalks);
-        renderLayer();
-        return;
-      }
-      document.querySelectorAll("#viewToggle button").forEach(function (b) { b.classList.remove("active"); });
-      btn.classList.add("active");
-      sidewalkFilter = v;
-      showSidewalks = true;
-      renderLayer();
-    });
+  // Sidewalk filter checkboxes
+  document.getElementById("swAssessed").addEventListener("change", function (e) {
+    swShowAssessed = e.target.checked;
+    renderLayer();
+  });
+  document.getElementById("swUnassessed").addEventListener("change", function (e) {
+    swShowUnassessed = e.target.checked;
+    renderLayer();
+  });
+  // Parcel filter checkboxes
+  document.getElementById("pAssessed").addEventListener("change", function (e) {
+    pShowAssessed = e.target.checked;
+    renderLayer();
+  });
+  document.getElementById("pUnassessed").addEventListener("change", function (e) {
+    pShowUnassessed = e.target.checked;
+    renderLayer();
   });
 
   // Boot: fetch parcels, then segments, then segment assessments
@@ -995,8 +972,6 @@
             "Sidewalk segments are not set up yet: the <code>sidewalk_segments</code> table was not found. " +
             "Parcels still load, but assessments need the segments table — run <code>sql/segments.sql</code> (see README)."
           );
-          var sb = document.querySelector('#viewToggle button[data-view="sidewalks"]');
-          if (sb) sb.style.display = "none";
         });
     })
     .then(function () {
@@ -1134,24 +1109,24 @@
     // Issues by surface
     html += '<div class="chartSection"><h3>Top Issue by Surface</h3>';
     html += '<table style="width:100%;font-size:13px;border-collapse:collapse;">';
-    html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th>Surface</th><th>Most Common Issue</th><th>Count</th></tr>';
+    html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th style="padding:8px;">Surface</th><th style="padding:8px;">Most Common Issue</th><th style="padding:8px;">Count</th></tr>';
     Object.keys(surfStats).sort().forEach(function (s) {
       var issues = surfStats[s].issues;
       var topIssue = "-", topCount = 0;
       Object.keys(issues).forEach(function (i) {
         if (issues[i] > topCount) { topCount = issues[i]; topIssue = i; }
       });
-      html += '<tr style="border-bottom:1px solid var(--line);"><td>' + escapeHtml(s) + '</td><td>' + escapeHtml(topIssue) + '</td><td>' + topCount + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px;">' + escapeHtml(s) + '</td><td style="padding:8px;">' + escapeHtml(topIssue) + '</td><td style="padding:8px;">' + topCount + '</td></tr>';
     });
     html += '</table></div>';
 
     // Priority fixes list
     html += '<div class="chartSection"><h3>Priority Fixes (' + priorityList.length + ')</h3>';
     if (priorityList.length) {
-      html += '<table style="width:100%;font-size:13px;border-collapse:collapse;">';
-      html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th></th><th>Address</th><th>Parcel</th><th>Street</th><th>Condition</th></tr>';
+      html += '<table style="width:100%;font-size:13px;border-collapse:collapse;table-layout:fixed;">';
+      html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th style="padding:8px;width:52px;"></th><th style="padding:8px;">Address</th><th style="padding:8px;">Parcel</th><th style="padding:8px;">Street</th><th style="padding:8px;">Condition</th></tr>';
       priorityList.forEach(function (r) {
-        html += '<tr style="border-bottom:1px solid var(--line);"><td><button type="button" class="gotoBtn" data-grid="' + escapeHtml(r.parcel) + '" style="padding:4px 10px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;">Go</button></td><td>' + escapeHtml(r.address) + '</td><td style="font-family:monospace;font-size:11px;">' + escapeHtml(r.parcel) + '</td><td>' + escapeHtml(r.street) + '</td><td><span class="segDot" style="background:' + CONDITION_COLORS[r.condition] + '"></span>' + CONDITION_LABELS[r.condition] + '</td></tr>';
+        html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px 4px;"><button type="button" class="gotoBtn" data-grid="' + escapeHtml(r.parcel) + '" style="padding:6px 14px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;white-space:nowrap;">Go</button></td><td style="padding:8px;white-space:nowrap;">' + escapeHtml(r.address) + '</td><td style="padding:8px;font-family:monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(r.parcel) + '">' + escapeHtml(r.parcel) + '</td><td style="padding:8px;white-space:nowrap;">' + escapeHtml(r.street) + '</td><td style="padding:8px;white-space:nowrap;"><span class="segDot" style="background:' + CONDITION_COLORS[r.condition] + '"></span>' + CONDITION_LABELS[r.condition] + '</td></tr>';
       });
       html += '</table>';
     } else {

@@ -37,9 +37,9 @@
   .mapBtn.active { background: var(--green-600); color: #fff; border-color: var(--green-600); }
   #locateBtn { top: 12px; right: 12px; padding: 9px; line-height: 0; height: 38px; width: 38px; box-sizing: border-box; justify-content: center; }
   #locateBtn svg { display: block; }
-  #globalBtn { top: 12px; right: 58px; height: 38px; box-sizing: border-box; }
-  #analyticsBtn { top: 12px; right: 168px; height: 38px; box-sizing: border-box; }
-  #showPanelBtn { bottom: 16px; right: 12px; display: none; }
+  #globalBtn { top: 12px; right: 58px; height: 38px; width: 38px; padding: 9px; line-height: 0; box-sizing: border-box; justify-content: center; }
+  #globalBtn svg { display: block; }
+  #analyticsBtn { top: 12px; right: 104px; height: 38px; box-sizing: border-box; }
   #panel { width: 340px; border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; background: #fff; min-width: 0; transition: width .3s ease, opacity .25s ease, padding .3s ease; }
   #panel.hidden { display: none; }
   #panel.collapsed { width: 0; padding: 0; opacity: 0; overflow: hidden; border-left-width: 0; }
@@ -56,7 +56,7 @@
   .condBox:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .condLabel { font-size: 11px; color: var(--ink-soft); text-align: center; line-height: 1.2; }
   #globalBtn { top: 12px; right: 58px; }
-  #globalPanel { position: absolute; top: 56px; right: 12px; z-index: 1000; width: 340px; max-width: calc(100vw - 24px); max-height: calc(100% - 68px); overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-md); }
+  #globalPanel { position: absolute; top: 56px; right: 12px; z-index: 1000; width: 280px; max-width: calc(100vw - 24px); max-height: calc(100% - 68px); overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-md); }
   #globalPanel.hidden { display: none; }
   .settingsSection { margin-bottom: 16px; }
   .settingsSection:last-child { margin-bottom: 0; }
@@ -95,11 +95,9 @@
   #saveStatus.ok { color: var(--green-600); }
   #saveStatus.warn { color: #9a6a00; }
   #saveStatus.err { color: #b00020; }
-  #viewToggle, #filters { display: flex; gap: 8px; flex-wrap: nowrap; }
-  #filters button, #viewToggle button { padding: 8px 12px; flex: 1; white-space: nowrap; }
-  #viewToggle button, #filters button { font-size: 13px; font-weight: 600; border: 2px solid var(--line); border-radius: 999px; background: #fff; cursor: pointer; color: var(--ink); transition: all .15s; }
-  #viewToggle button:hover, #filters button:hover { border-color: #d1d5db; background: var(--bg-soft); }
-  #viewToggle button.active, #filters button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .checkRow { display: flex; gap: 16px; }
+  .checkRow label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .checkRow input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); cursor: pointer; }
   .segRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; margin: 6px 0; font-size: 14px; font-weight: 500; text-align: left; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: all .15s; }
   .segRow:hover { background: #eef4ff; border-color: #bfdbfe; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
   .segDot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; flex: none; }
@@ -131,6 +129,7 @@
   #analyticsPanel.hidden { display: none; }
   #analyticsBar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); background: #fff; }
   #analyticsBar h2 { margin: 0; font-size: 18px; }
+  #analyticsBar .btn.secondary { margin-top: 0; padding: 8px 16px; font-size: 13px; border-radius: 999px; border-width: 2px; }
   #analyticsClose { padding: 8px 16px; font-size: 13px; font-weight: 600; border: 2px solid var(--line); border-radius: 999px; background: #fff; cursor: pointer; }
   #analyticsClose:hover { background: var(--bg-soft); }
   #analyticsBody { flex: 1; overflow-y: auto; padding: 16px; }
@@ -160,23 +159,21 @@
 <div id="main">
   <div id="mapWrap">
     <div id="map"></div>
-    <button class="mapBtn" id="globalBtn" type="button" aria-label="Show settings" title="Show settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h13M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>Settings</button>
+    <button class="mapBtn" id="globalBtn" type="button" aria-label="Show settings" title="Show settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h13M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg></button>
     <button class="mapBtn" id="analyticsBtn" type="button" aria-label="Show analytics" title="Show analytics"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Data</button>
     <div id="globalPanel" class="hidden">
       <div class="settingsSection">
         <h3>Sidewalks</h3>
-        <div id="viewToggle">
-          <button data-view="all" class="active">All</button>
-          <button data-view="assessed">Assessed</button>
-          <button data-view="unassessed">Not Assessed</button>
+        <div class="checkRow">
+          <label><input type="checkbox" id="swAssessed" checked> Assessed</label>
+          <label><input type="checkbox" id="swUnassessed" checked> Not Assessed</label>
         </div>
       </div>
       <div class="settingsSection">
         <h3>Parcels</h3>
-        <div id="filters">
-          <button data-filter="all" class="active">All</button>
-          <button data-filter="assessed">Assessed</button>
-          <button data-filter="unassessed">Not Assessed</button>
+        <div class="checkRow">
+          <label><input type="checkbox" id="pAssessed" checked> Assessed</label>
+          <label><input type="checkbox" id="pUnassessed" checked> Not Assessed</label>
         </div>
       </div>
       <div id="searchRow">
@@ -188,10 +185,9 @@
       </div>
     </div>
     <button class="mapBtn" id="locateBtn" type="button" aria-label="Locate me" title="Locate me"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
-    <button class="mapBtn" id="showPanelBtn" type="button">Show panel</button>
   </div>
   <aside id="panel">
-    <button class="btn secondary" id="panelToggle" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 9l3 3-3 3"/><path d="M10 4v16"/></svg>Hide panel</button>
+    <button class="btn secondary" id="panelToggle" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 9l3 3-3 3"/><path d="M10 4v16"/></svg>Hide</button>
     <div id="parcelPanel">
       <p style="color:#555; font-size:14px;">Select a parcel on the map to assess its sidewalk.</p>
     </div>
@@ -200,9 +196,9 @@
 <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
 <div id="analyticsPanel" class="hidden">
   <div id="analyticsBar">
-    <h2>Survey Analytics</h2>
+    <h2>Sidewalk Data</h2>
     <div style="display:flex;gap:8px;">
-      <button id="exportBtn" type="button" class="btn secondary">Export assessments (CSV)</button>
+      <button id="exportBtn" type="button" class="btn secondary">Export (CSV)</button>
       <button id="analyticsClose" type="button">Close</button>
     </div>
   </div>
@@ -210,8 +206,8 @@
 </div>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=51"></script>
-<script src="buildings.js?v=51"></script>
-<script src="app.js?v=51"></script>
+<script src="config.js?v=59"></script>
+<script src="buildings.js?v=59"></script>
+<script src="app.js?v=59"></script>
 </body>
 </html>
