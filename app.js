@@ -13,9 +13,128 @@
   var KEY = cfg.SUPABASE_ANON_KEY || "";
   var KEY_MISSING = !KEY || KEY === "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
 
+  // Edit mode uses one shared Supabase Auth account, not per-person logins.
+  // The form is always visible; Save/Clear show a password popup only when
+  // there is no login session. A toggle in Settings is the edit-mode
+  // switch: turning it off signs out (clears the saved password), so
+  // turning it back on re-prompts. The password is verified by Supabase and
+  // writes go out with the login session. A password check in page JS alone
+  // would not stop a bot, because the anon key is public and anyone could
+  // call the API directly. Create exactly this user in the Supabase
+  // dashboard (Authentication -> Users -> Add user); the password you set
+  // there is the shareable edit password. The popup field is plain text
+  // (not masked), per spec.
+  var EDITOR_EMAIL = "editor@rhinebeck-survey.org";
+  var authClient = null;
+  var editAccessToken = null;
+  if (window.supabase && !KEY_MISSING) {
+    authClient = window.supabase.createClient(BASE, KEY);
+    authClient.auth.getSession().then(function (res) {
+      if (res.data && res.data.session) editAccessToken = res.data.session.access_token;
+      syncEditToggle();
+    });
+    authClient.auth.onAuthStateChange(function (_event, session) {
+      editAccessToken = session ? session.access_token : null;
+      syncEditToggle();
+    });
+  }
+
+  // Edit-password popup: shown only when Save or Clear is clicked without
+  // a login session. The form itself stays visible and editable; the popup
+  // gates only the write. The password field is plain text, not masked.
+  var pendingEditAction = null; // { phrase, proceed, onCancel } while the popup is open
+  function showEditPwDialog(phrase) {
+    var msg = document.getElementById("editPwMsg");
+    if (msg) msg.textContent = "Enter the edit password to " + phrase + ".";
+    var st = document.getElementById("editPwStatus");
+    if (st) st.textContent = "";
+    var input = document.getElementById("editPwInput");
+    if (input) input.value = "";
+    var dlg = document.getElementById("editPwDialog");
+    if (dlg) dlg.hidden = false;
+    if (input) input.focus();
+  }
+  function closeEditPwDialog(cancelled) {
+    var dlg = document.getElementById("editPwDialog");
+    if (dlg) dlg.hidden = true;
+    var input = document.getElementById("editPwInput");
+    if (input) input.value = "";
+    var pending = pendingEditAction;
+    pendingEditAction = null;
+    if (cancelled && pending && pending.onCancel) pending.onCancel();
+  }
+  function requireEditSession(phrase, proceed, onCancel) {
+    if (editAccessToken) { proceed(); return; }
+    pendingEditAction = { phrase: phrase, proceed: proceed, onCancel: onCancel || null };
+    showEditPwDialog(phrase);
+  }
+  // The settings toggle mirrors the login session: on = a session exists.
+  function syncEditToggle() {
+    var t = document.getElementById("editModeToggle");
+    if (t) t.checked = !!editAccessToken;
+  }
+  // Wire the popup buttons once (its HTML precedes the script tags).
+  (function wireEditPwDialog() {
+    var closeBtn = document.getElementById("editPwCloseBtn");
+    if (closeBtn) closeBtn.addEventListener("click", function () { closeEditPwDialog(true); });
+    var cancelBtn = document.getElementById("editPwCancelBtn");
+    if (cancelBtn) cancelBtn.addEventListener("click", function () { closeEditPwDialog(true); });
+    var submitBtn = document.getElementById("editPwSubmitBtn");
+    var input = document.getElementById("editPwInput");
+    if (input) input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && submitBtn) submitBtn.click();
+    });
+    if (submitBtn) submitBtn.addEventListener("click", function () {
+      var pw = input ? input.value : "";
+      var st = document.getElementById("editPwStatus");
+      if (!pw) return;
+      if (!authClient) {
+        if (st) { st.textContent = "Sign-in is not set up on this site yet."; st.style.color = "#dc2626"; }
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Checking…";
+      authClient.auth.signInWithPassword({ email: EDITOR_EMAIL, password: pw }).then(function (res) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Continue";
+        if (res.error || !res.data.session) {
+          if (st) { st.textContent = "Wrong password."; st.style.color = "#dc2626"; }
+          return;
+        }
+        editAccessToken = res.data.session.access_token;
+        syncEditToggle();
+        var pending = pendingEditAction;
+        closeEditPwDialog(false);
+        if (pending) pending.proceed();
+      });
+    });
+  })();
+  // Settings toggle: the single edit-mode switch. Turning it off signs out
+  // (clears the saved password), so turning it back on re-prompts.
+  (function wireEditToggle() {
+    var t = document.getElementById("editModeToggle");
+    if (!t) return;
+    syncEditToggle();
+    t.addEventListener("change", function () {
+      if (t.checked) {
+        if (!editAccessToken) {
+          requireEditSession("turn on edit mode", function () {
+            syncEditToggle();
+          }, function () {
+            syncEditToggle();
+          });
+        }
+      } else {
+        if (authClient) authClient.auth.signOut();
+        editAccessToken = null;
+        syncEditToggle();
+      }
+    });
+  })();
+
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 80;
+  var APP_VERSION = 84;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -105,10 +224,12 @@
     map.on("click", function (e) {
       var hits = map.queryRenderedFeatures(e.point, { layers: ["parcels-fill", "segments-hit"] });
       if (!hits.length && (selectedGrid !== null || selectedSegmentId !== null)) {
-        selectedGrid = null;
-        selectedSegmentId = null;
-        renderLayer();
-        hidePanel();
+        guardUnsavedChanges(function () {
+          selectedGrid = null;
+          selectedSegmentId = null;
+          renderLayer();
+          doHidePanel();
+        });
       }
     });
     map.addSource("loc-accuracy", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -394,7 +515,9 @@
   }
 
   function apiHeaders() {
-    return { apikey: KEY, "Content-Type": "application/json" };
+    var h = { apikey: KEY, "Content-Type": "application/json" };
+    if (editAccessToken) h.Authorization = "Bearer " + editAccessToken;
+    return h;
   }
 
   // Fetch all rows from a PostgREST table, following offset pagination.
@@ -727,21 +850,25 @@
       });
     }
     saveBtn.addEventListener("click", function () {
-      var surface = selectedValues("surface");
-      var issues = selectedValues("issue");
-      var priorityFix = document.getElementById("priorityBox").classList.contains("checked");
-      var notes = document.getElementById("notesInput").value.trim();
-      saveAssessment(id, selectedCondition, surface, issues, priorityFix, notes);
+      requireEditSession("save this assessment", function () {
+        var surface = selectedValues("surface");
+        var issues = selectedValues("issue");
+        var priorityFix = document.getElementById("priorityBox").classList.contains("checked");
+        var notes = document.getElementById("notesInput").value.trim();
+        saveAssessment(id, selectedCondition, surface, issues, priorityFix, notes);
+      });
     });
     ["clearBtn", "clearBtnFlow"].forEach(function (btnId) {
       var cb = document.getElementById(btnId);
       if (cb) cb.addEventListener("click", function () {
-        if (segAssessments[id]) {
-          // Destructive: confirm before deleting the saved assessment.
-          if (confirm("Clear the saved assessment for this sidewalk?")) saveAssessment(id, null);
-        } else {
-          resetForm();
-        }
+        requireEditSession("clear this assessment", function () {
+          if (segAssessments[id]) {
+            // Destructive: confirm before deleting the saved assessment.
+            if (confirm("Clear the saved assessment for this sidewalk?")) saveAssessment(id, null);
+          } else {
+            resetForm();
+          }
+        });
       });
     });
     // Zoom to the segment.

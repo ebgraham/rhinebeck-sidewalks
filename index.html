@@ -89,6 +89,8 @@
   .modalClose { position: absolute; top: 8px; right: 10px; border: 0; background: none; font-size: 22px; line-height: 1; color: var(--ink-soft); cursor: pointer; padding: 4px; }
   .modalClose:hover { color: var(--ink); }
   .modalCard h3 { margin: 0 0 8px; font-size: 16px; }
+  .modalCard input[type="text"] { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+  .modalCard input[type="text"]:focus { outline: none; border-color: var(--green-600); box-shadow: 0 0 0 3px rgba(26,107,60,.12); }
   .modalCard p { margin: 0 0 16px; font-size: 14px; color: var(--ink-soft); }
   .modalActions { display: flex; gap: 10px; justify-content: flex-end; }
   .modalActions .btn { margin: 0; padding: 8px 14px; font-size: 13px; }
@@ -216,6 +218,12 @@
           <label><input type="checkbox" id="pUnassessed" checked> Not Assessed</label>
         </div>
       </div>
+      <div class="settingsSection">
+        <h3>Edit mode</h3>
+        <div class="checkRow">
+          <label><input type="checkbox" id="editModeToggle"> Edit mode</label>
+        </div>
+      </div>
       <div id="searchRow">
         <div id="searchWrap">
           <input type="text" id="searchInput" placeholder="Search address or parcel ID, e.g. 2 Mill Rd" autocomplete="off">
@@ -257,10 +265,24 @@
     </div>
   </div>
 </div>
+<div id="editPwDialog" class="modalOverlay" hidden>
+  <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="editPwTitle">
+    <button type="button" class="modalClose" id="editPwCloseBtn" aria-label="Close">&times;</button>
+    <h3 id="editPwTitle">Edit password</h3>
+    <p id="editPwMsg">Enter the edit password to save this assessment.</p>
+    <input type="text" id="editPwInput" placeholder="Shared edit password" autocomplete="off">
+    <div id="editPwStatus" style="font-size:13px;min-height:18px;margin:8px 0 12px;"></div>
+    <div class="modalActions">
+      <button type="button" class="btn secondary" id="editPwCancelBtn">Cancel</button>
+      <button type="button" class="btn" id="editPwSubmitBtn">Continue</button>
+    </div>
+  </div>
+</div>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
-<script src="config.js?v=80"></script>
-<script src="buildings.js?v=80"></script>
-<script src="app.js?v=80"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js?v=84"></script>
+<script src="buildings.js?v=84"></script>
+<script src="app.js?v=84"></script>
 </body>
 </html>
