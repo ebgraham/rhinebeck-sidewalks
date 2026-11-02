@@ -134,7 +134,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 85;
+  var APP_VERSION = 92;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -195,7 +195,23 @@
     // NOTE: line-cap and line-join are LAYOUT properties in MapLibre, not
     // paint. Putting them in paint fails style validation and the whole
     // layer is rejected (this was the missing-lines bug).
-    map.addLayer({ id: "segments-line", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
+    map.addLayer({ id: "segments-line", type: "line", source: "segments", filter: ["!=", ["get", "dotted"], 1], layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"] } });
+    // No Sidewalk lines are dotted. A dash pattern cannot vary per feature
+    // (line-dasharray takes no data expression), so No Sidewalk segments get
+    // their own layer. The pattern tightens when zoomed out: at far zoom,
+    // segments are short on screen, so the wide [1,4] gaps leave only a dot
+    // or two per segment and it stops reading as dotted. Zoom expressions
+    // are evaluated at integer zooms; interpolation is disallowed for
+    // line-dasharray, so this is a step (denser below the opening zoom 15,
+    // wider at 15 and up), and dash arrays must be literals.
+    var dottedDash = ["step", ["zoom"], ["literal", [1, 2]], 15, ["literal", [1, 4]]];
+    map.addLayer({ id: "segments-line-dotted", type: "line", source: "segments", filter: ["==", ["get", "dotted"], 1], layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"], "line-dasharray": dottedDash } });
+    // Fallback: style validation failures are silent (error event, no
+    // throw) and the layer simply never exists, so check and re-add with a
+    // fixed denser pattern rather than losing the dotted lines.
+    if (!map.getLayer("segments-line-dotted")) {
+      map.addLayer({ id: "segments-line-dotted", type: "line", source: "segments", filter: ["==", ["get", "dotted"], 1], layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "lineColor"], "line-width": ["get", "lineWidth"], "line-dasharray": [1, 2] } });
+    }
     // Invisible wide hit layer for easier tapping (does not affect visual line width).
     map.addLayer({ id: "segments-hit", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#000", "line-opacity": 0, "line-width": 24 } });
     map.on("mouseenter", "segments-hit", function () { map.getCanvas().style.cursor = "pointer"; });
@@ -495,7 +511,7 @@
   // a Settings toggle shows them.
   var showSidewalks = true;
   var swShowAssessed = true;
-  var swShowUnassessed = true;
+  var swShowUnassessed = false;
   var showParcels = true;
   var pShowAssessed = true;
   var pShowUnassessed = true;
@@ -560,8 +576,7 @@
   }
 
   // Parcels: blue outline always. Selected parcel gets a light blue fill
-  // (keeping the usual blue border); parcels with at least one assessed
-  // segment get a very light blue fill. Unassessed, unselected parcels
+  // (keeping the usual blue border). All other parcels, assessed or not,
   // stay visually unfilled (1% opacity keeps the fill layer tappable).
   function styleFor(feature) {
     var isSelected = feature.properties.parcelgrid === selectedGrid;
@@ -571,20 +586,22 @@
     };
   }
 
-  function parcelFillFor(feature, assessedParcels) {
+  function parcelFillFor(feature) {
     var grid = feature.properties.parcelgrid;
     if (grid === selectedGrid) return { fillColor: "#93c5fd", fillOpacity: 0.45 };
-    if (assessedParcels[grid]) return { fillColor: "#dbeafe", fillOpacity: 0.55 };
     return { fillColor: "#3388ff", fillOpacity: 0.01 };
   }
 
   // Segment lines: condition color when assessed, gray when not.
+  // No Sidewalk (dotted) and Not Assessed (solid) share the same gray;
+  // the dotted line is slightly thicker (3px vs 2.5px, 6px vs 5px
+  // when selected).
   function segmentStyleFor(feature) {
     var a = segAssessments[feature.properties.id];
     var isSelected = feature.properties.id === selectedSegmentId;
     if (a && CONDITION_COLORS[a.condition] != null) {
-      // No Sidewalk (0) renders at unassessed width; others at assessed width.
-      if (a.condition === 0) return { color: CONDITION_COLORS[0], width: isSelected ? 5 : 2.5 };
+      // No Sidewalk (0) renders dotted at 3px; assessed conditions at 4px.
+      if (a.condition === 0) return { color: CONDITION_COLORS[0], width: isSelected ? 6 : 3 };
       return { color: CONDITION_COLORS[a.condition], width: isSelected ? 7 : 4 };
     }
     return { color: "#6b7280", width: isSelected ? 5 : 2.5 };
@@ -630,14 +647,9 @@
 
   function renderLayer() {
     if (!map.getSource("parcels")) return; // map style not loaded yet; the load handler re-renders
-    // Parcels with at least one assessed segment get a very light blue fill.
-    var assessedParcels = {};
-    segments.forEach(function (seg) {
-      if (segAssessments[seg.properties.id]) assessedParcels[seg.properties.parcelgrid] = true;
-    });
     var feats = visibleFeatures().map(function (f) {
       var s = styleFor(f);
-      var fill = parcelFillFor(f, assessedParcels);
+      var fill = parcelFillFor(f);
       var props = Object.assign({}, f.properties, {
         fillColor: fill.fillColor, fillOpacity: fill.fillOpacity,
         lineColor: s.color,
@@ -658,7 +670,7 @@
         })
         .map(function (f) {
           var s = segmentStyleFor(f);
-          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width });
+          var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width, dotted: (segAssessments[f.properties.id] && segAssessments[f.properties.id].condition === 0) ? 1 : 0 });
           return { type: "Feature", properties: props, geometry: f.geometry };
         });
       map.getSource("segments").setData({ type: "FeatureCollection", features: segFeats });
@@ -671,6 +683,9 @@
     }
     if (map.getLayer("segments-line")) {
       map.setLayoutProperty("segments-line", "visibility", showSidewalks ? "visible" : "none");
+    }
+    if (map.getLayer("segments-line-dotted")) {
+      map.setLayoutProperty("segments-line-dotted", "visibility", showSidewalks ? "visible" : "none");
     }
     if (map.getLayer("segments-hit")) {
       map.setLayoutProperty("segments-hit", "visibility", showSidewalks ? "visible" : "none");
