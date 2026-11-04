@@ -134,7 +134,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 96;
+  var APP_VERSION = 98;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -392,6 +392,15 @@
   var pendingDismissAction = null; // action to run after save/discard in unsaved dialog
 
   function doHidePanel() {
+    // Fully dismissing the panel also deselects the parcel (and segment),
+    // so no highlight lingers on the map. This does NOT run when the panel
+    // still shows the parcel's segment list: going back to that list uses
+    // selectParcel, which never calls this. It also does not run before
+    // the unsaved-changes dialog: hidePanel only stores this as the
+    // pending action, so the selection survives until Save or Discard.
+    selectedGrid = null;
+    selectedSegmentId = null;
+    renderLayer();
     panel.classList.add("collapsed");
     syncMapDuringTransition();
   }
@@ -844,7 +853,7 @@
         return '<div class="condItem"><button type="button" class="condBox' + (String(a.condition) === String(n) ? " selected" : "") + '" data-condition="' + n + '" style="background:' + CONDITION_COLORS[n] + ';color:' + CONDITION_TEXT_COLORS[n] + '">' + label + "</button><span class=\"condLabel\">" + CONDITION_LABELS[n] + "</span></div>";
       }).join("") +
       "</div>" +
-      '<label>Surface (tap all that apply)</label>' +
+      '<label>Surface (tap at least one)</label>' +
       optionGroup("surface", SURFACES, a.surface, "surfaceBox") +
       '<label>Issues (tap all that apply)</label>' +
       optionGroup("issue", ISSUES, a.issues, "issueBox") +
@@ -865,10 +874,11 @@
     document.getElementById("notesInput").value = a.notes || "";
     var saveBtn = document.getElementById("saveBtn");
     // Condition starts at the saved value (if any); Save stays disabled
-    // until a box is picked.
+    // until a condition is picked and, except for No Sidewalk, at least
+    // one surface is picked.
     var condNum = Number(a.condition);
     selectedCondition = (condNum >= 0 && condNum <= 4) ? condNum : null;
-    saveBtn.disabled = selectedCondition === null;
+    updateSaveState();
     captureFormBaseline(a);
     updateScrollFade();
     document.querySelectorAll(".condBox").forEach(function (btn) {
@@ -876,7 +886,6 @@
         selectedCondition = parseInt(btn.getAttribute("data-condition"), 10);
         document.querySelectorAll(".condBox").forEach(function (b) { b.classList.remove("selected"); });
         btn.classList.add("selected");
-        saveBtn.disabled = false;
         // Disable Surface/Issues when "No Sidewalk" is picked, but keep
         // Priority Fix and Notes enabled.
         var noSidewalk = selectedCondition === 0;
@@ -884,11 +893,13 @@
           b.classList.toggle("disabled", noSidewalk);
           if (noSidewalk) b.classList.remove("selected");
         });
+        updateSaveState();
       });
     });
     document.querySelectorAll(".optBox").forEach(function (btn) {
       btn.addEventListener("click", function () {
         btn.classList.toggle("selected");
+        updateSaveState();
       });
     });
     var priorityBtn = document.getElementById("priorityBox");
@@ -939,6 +950,16 @@
     var out = [];
     document.querySelectorAll('.optBox[data-name="' + name + '"].selected').forEach(function (el) { out.push(el.getAttribute("data-value")); });
     return out;
+  }
+
+  // Save is enabled only when a condition is picked and, except for
+  // "No Sidewalk" (whose Surface boxes are disabled), at least one
+  // surface is picked.
+  function updateSaveState() {
+    var sb = document.getElementById("saveBtn");
+    if (!sb) return;
+    sb.disabled = selectedCondition === null ||
+      (selectedCondition !== 0 && selectedValues("surface").length === 0);
   }
 
   function setStatus(text, cls) {
