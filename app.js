@@ -134,7 +134,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 92;
+  var APP_VERSION = 96;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -161,6 +161,12 @@
     3: "#1a1a1a",
     4: "#ffffff"
   };
+  // Condition dot: No Sidewalk is a white circle with a diagonal red
+  // slash, so it never reads as the gray Not Assessed circle.
+  function conditionDot(condition, cls) {
+    if (condition === 0) return '<span class="' + cls + ' noSidewalk"></span>';
+    return '<span class="' + cls + '" style="background:' + CONDITION_COLORS[condition] + '"></span>';
+  }
   var SURFACES = ["Bluestone", "Concrete", "Asphalt", "Stone Aggregate", "Gravel", "Other"];
   var ISSUES = ["Lifted", "Cracked", "Worn", "Grass/Dirt", "Narrow", "Other"];
 
@@ -406,6 +412,19 @@
     var dlg = document.getElementById("unsavedDialog");
     if (dlg) dlg.hidden = true;
   }
+  // Clear-confirmation dialog (styled like the Unsaved Changes dialog,
+  // not the native browser popup). pendingClearId holds the segment
+  // being cleared while the dialog is open.
+  var pendingClearId = null;
+  function showClearDialog(id) {
+    pendingClearId = id;
+    var dlg = document.getElementById("clearDialog");
+    if (dlg) dlg.hidden = false;
+  }
+  function hideClearDialog() {
+    var dlg = document.getElementById("clearDialog");
+    if (dlg) dlg.hidden = true;
+  }
   // Run proceed() immediately, or prompt to save/discard first when the
   // assessment form is dirty. Used for any navigation that would replace
   // the form (tapping another parcel/segment, search, Go button).
@@ -453,6 +472,21 @@
     var sb = document.getElementById("saveBtn");
     if (sb) sb.click();
     // pendingDismissAction runs after the save completes.
+  });
+
+  // Clear-confirmation dialog buttons.
+  document.getElementById("clearConfirmBtn").addEventListener("click", function () {
+    hideClearDialog();
+    var id = pendingClearId;
+    pendingClearId = null;
+    if (id != null) saveAssessment(id, null);
+  });
+  ["clearCancelBtn", "clearCloseBtn"].forEach(function (btnId) {
+    var b = document.getElementById(btnId);
+    if (b) b.addEventListener("click", function () {
+      hideClearDialog();
+      pendingClearId = null; // stay on the form, keep the assessment
+    });
   });
 
   // Swipe down to dismiss the panel on touch devices. Only triggers when the
@@ -626,7 +660,7 @@
     });
     if (counts[0] > 0) {
       parts.push(
-        '<span><span class="dot" style="background:' + CONDITION_COLORS[0] + '"></span>' +
+        '<span>' + conditionDot(0, "dot") +
         "No Sidewalk: <b>" + counts[0] + "</b></span>"
       );
     }
@@ -743,7 +777,7 @@
       var sa = segAssessments[s.properties.id];
       var status;
       if (sa && sa.condition === 0) {
-        status = '<span class="segDot" style="background:' + CONDITION_COLORS[0] + '"></span>No Sidewalk';
+        status = conditionDot(0, "segDot") + 'No Sidewalk';
       } else if (sa && CONDITION_COLORS[sa.condition] != null) {
         status = '<span class="segDot" style="background:' + CONDITION_COLORS[sa.condition] + '"></span>' + CONDITION_LABELS[sa.condition];
       } else {
@@ -878,8 +912,8 @@
       if (cb) cb.addEventListener("click", function () {
         requireEditSession("clear this assessment", function () {
           if (segAssessments[id]) {
-            // Destructive: confirm before deleting the saved assessment.
-            if (confirm("Clear the saved assessment for this sidewalk?")) saveAssessment(id, null);
+            // Destructive: confirm via the styled dialog, not the native popup.
+            showClearDialog(id);
           } else {
             resetForm();
           }
@@ -1412,7 +1446,7 @@
       html += '<table style="width:100%;min-width:520px;font-size:13px;border-collapse:collapse;table-layout:fixed;">';
       html += '<tr style="text-align:left;border-bottom:1px solid var(--line);"><th style="padding:8px;width:52px;"></th><th style="padding:8px;">Address</th><th style="padding:8px;">Parcel</th><th style="padding:8px;">Street</th><th style="padding:8px;">Condition</th></tr>';
       priorityList.forEach(function (r) {
-        html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px 4px;"><button type="button" class="gotoBtn" data-grid="' + escapeHtml(r.parcel) + '" style="padding:6px 14px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;white-space:nowrap;">Go</button></td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(r.address) + '">' + escapeHtml(r.address) + '</td><td style="padding:8px;font-family:monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(r.parcel) + '">' + escapeHtml(r.parcel) + '</td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(r.street) + '">' + escapeHtml(r.street) + '</td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + '<span class="segDot" style="background:' + CONDITION_COLORS[r.condition] + '"></span>' + CONDITION_LABELS[r.condition] + '</td></tr>';
+        html += '<tr style="border-bottom:1px solid var(--line);"><td style="padding:8px 4px;"><button type="button" class="gotoBtn" data-grid="' + escapeHtml(r.parcel) + '" style="padding:6px 14px;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;white-space:nowrap;">Go</button></td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(r.address) + '">' + escapeHtml(r.address) + '</td><td style="padding:8px;font-family:monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(r.parcel) + '">' + escapeHtml(r.parcel) + '</td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(r.street) + '">' + escapeHtml(r.street) + '</td><td style="padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + conditionDot(r.condition, "segDot") + CONDITION_LABELS[r.condition] + '</td></tr>';
       });
       html += '</table></div>';
     } else {

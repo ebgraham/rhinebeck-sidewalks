@@ -137,6 +137,7 @@
   .segRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; margin: 6px 0; font-size: 14px; font-weight: 500; text-align: left; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: all .15s; }
   .segRow:hover { background: #eef4ff; border-color: #bfdbfe; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
   .segDot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; flex: none; }
+  .noSidewalk { background: #fff; border: 1px solid #9ca3af; box-sizing: border-box; background-image: linear-gradient(to top left, transparent calc(50% - 1px), #6b7280 calc(50% - 1px), #6b7280 calc(50% + 1px), transparent calc(50% + 1px)); }
   .segEmpty { color: var(--ink-soft); font-size: 14px; padding: 12px 0; }
   #backBtn { margin: 0 0 12px; }
   #searchRow { display: flex; gap: 8px; margin: 12px 0; align-items: stretch; }
@@ -278,11 +279,22 @@
     </div>
   </div>
 </div>
+<div id="clearDialog" class="modalOverlay" hidden>
+  <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="clearTitle">
+    <button type="button" class="modalClose" id="clearCloseBtn" aria-label="Close">&times;</button>
+    <h3 id="clearTitle">Clear assessment</h3>
+    <p>Clear the saved assessment for this sidewalk?</p>
+    <div class="modalActions">
+      <button type="button" class="btn secondary" id="clearCancelBtn">Keep</button>
+      <button type="button" class="btn danger-outline" id="clearConfirmBtn">Clear</button>
+    </div>
+  </div>
+</div>
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=92"></script>
-<script src="buildings.js?v=92"></script>
-<script src="app.js?v=92"></script>
+<script src="config.js?v=96"></script>
+<script src="buildings.js?v=96"></script>
+<script src="app.js?v=96"></script>
 </body>
 </html>
