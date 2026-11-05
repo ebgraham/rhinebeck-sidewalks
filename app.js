@@ -134,7 +134,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 98;
+  var APP_VERSION = 101;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -220,22 +220,54 @@
     }
     // Invisible wide hit layer for easier tapping (does not affect visual line width).
     map.addLayer({ id: "segments-hit", type: "line", source: "segments", layout: { visibility: "none", "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#000", "line-opacity": 0, "line-width": 24 } });
+    // Priority flags: a red flag planted at the midpoint of every
+    // priority_fix segment. Drawn on a canvas (no asset file) with a
+    // white outline so it reads on any condition color, including red
+    // Damaged lines. Pixel ratio 2 keeps it crisp on retina screens.
+    var flagCanvas = document.createElement("canvas");
+    flagCanvas.width = 48; flagCanvas.height = 48;
+    var fctx = flagCanvas.getContext("2d");
+    fctx.lineJoin = "round"; fctx.lineCap = "round";
+    fctx.strokeStyle = "#fff"; fctx.lineWidth = 7;
+    fctx.beginPath(); fctx.moveTo(9, 44); fctx.lineTo(9, 8); fctx.stroke();
+    fctx.strokeStyle = "#374151"; fctx.lineWidth = 3;
+    fctx.beginPath(); fctx.moveTo(9, 44); fctx.lineTo(9, 8); fctx.stroke();
+    fctx.beginPath();
+    fctx.moveTo(9, 8); fctx.lineTo(42, 8); fctx.lineTo(35, 16); fctx.lineTo(42, 24); fctx.lineTo(9, 24); fctx.closePath();
+    fctx.strokeStyle = "#fff"; fctx.lineWidth = 5; fctx.stroke();
+    fctx.fillStyle = "#d73027"; fctx.fill();
+    map.addImage("priority-flag", { width: 48, height: 48, data: fctx.getImageData(0, 0, 48, 48).data }, { pixelRatio: 2 });
+    map.addSource("priority-flags", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    var flagLayerSpec = { id: "priority-flags", type: "symbol", source: "priority-flags", layout: { visibility: "none", "icon-image": "priority-flag", "icon-size": 1.3, "icon-anchor": "bottom-left", "icon-allow-overlap": true, "icon-ignore-placement": true } };
+    map.addLayer(flagLayerSpec);
+    if (!map.getLayer("priority-flags")) map.addLayer(flagLayerSpec);
     map.on("mouseenter", "segments-hit", function () { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", "segments-hit", function () { map.getCanvas().style.cursor = ""; });
     map.on("mouseenter", "parcels-fill", function () { map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", "parcels-fill", function () { map.getCanvas().style.cursor = ""; });
+    map.on("mouseenter", "priority-flags", function () { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", "priority-flags", function () { map.getCanvas().style.cursor = ""; });
     // Click handlers per layer (the layer-click mechanism is the proven
     // one here). Both layers are visible now, so both handlers fire on
     // a line tap — the parcel handler defers when the tap also hits a
-    // sidewalk line, so the line wins.
+    // sidewalk line, so the line wins. The flag sits on the line, so the
+    // line and parcel handlers likewise defer when the tap hits a flag,
+    // and the flag handler selects the segment.
+    map.on("click", "priority-flags", function (e) {
+      if (e.features && e.features.length) {
+        var sid = e.features[0].properties.id;
+        guardUnsavedChanges(function () { selectSegment(sid); });
+      }
+    });
     map.on("click", "segments-hit", function (e) {
+      if (map.queryRenderedFeatures(e.point, { layers: ["priority-flags"] }).length) return;
       if (e.features && e.features.length) {
         var sid = e.features[0].properties.id;
         guardUnsavedChanges(function () { selectSegment(sid); });
       }
     });
     map.on("click", "parcels-fill", function (e) {
-      if (map.queryRenderedFeatures(e.point, { layers: ["segments-hit"] }).length) return;
+      if (map.queryRenderedFeatures(e.point, { layers: ["segments-hit", "priority-flags"] }).length) return;
       if (e.features && e.features.length) {
         var grid = e.features[0].properties.parcelgrid;
         guardUnsavedChanges(function () { selectParcel(grid); });
@@ -244,7 +276,7 @@
     // Tapping empty map (no parcel, no segment) dismisses the selection
     // and hides the panel.
     map.on("click", function (e) {
-      var hits = map.queryRenderedFeatures(e.point, { layers: ["parcels-fill", "segments-hit"] });
+      var hits = map.queryRenderedFeatures(e.point, { layers: ["parcels-fill", "segments-hit", "priority-flags"] });
       if (!hits.length && (selectedGrid !== null || selectedSegmentId !== null)) {
         guardUnsavedChanges(function () {
           selectedGrid = null;
@@ -341,7 +373,14 @@
   }
 
   locateBtn.addEventListener("click", function () {
-    // Always zoom to current location; never toggles off.
+    // Tapping while following turns location off entirely (stops the
+    // watch, removes the dot, and saves the preference off so it does
+    // not auto-resume). Tapping while off starts it; tapping after a
+    // manual drag resumes following.
+    if (locating && following) {
+      stopLocating();
+      return;
+    }
     if (!locating) {
       startLocating();
     }
@@ -376,17 +415,22 @@
   // Collapsible panel: on mobile the panel can cover the map, so it can be
   // hidden entirely and reopened from the map. Hiding slides the panel
   // away (width on desktop, height on mobile) instead of vanishing.
-  function syncMapDuringTransition() {
+  // The hide slide is deliberately slow (.8s) so the map's growth tracks
+  // it gradually instead of lurching; showing stays fast (.3s).
+  function syncMapDuringTransition(ms) {
     var start = performance.now();
     function frame(now) {
       map.resize();
-      if (now - start < 400) requestAnimationFrame(frame);
+      if (now - start < (ms || 400)) requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
   }
-  // Once the slide finishes, drop the collapsed panel from layout/tab order.
-  panel.addEventListener("transitionend", function () {
-    if (panel.classList.contains("collapsed")) panel.classList.add("hidden");
+  // Once the SIZE slide finishes, drop the collapsed panel from
+  // layout/tab order. Only the width (desktop) or max-height (mobile)
+  // finish counts: opacity finishes first (.25s), and acting on it would
+  // cut the slide short and jump the map the remaining distance.
+  panel.addEventListener("transitionend", function (e) {
+    if (panel.classList.contains("collapsed") && (e.propertyName === "width" || e.propertyName === "max-height")) panel.classList.add("hidden");
     map.resize();
   });
   var pendingDismissAction = null; // action to run after save/discard in unsaved dialog
@@ -402,7 +446,7 @@
     selectedSegmentId = null;
     renderLayer();
     panel.classList.add("collapsed");
-    syncMapDuringTransition();
+    syncMapDuringTransition(900);
   }
   function hidePanel() {
     // Intercept dismissal when the assessment form has unsaved changes.
@@ -555,6 +599,7 @@
   var showSidewalks = true;
   var swShowAssessed = true;
   var swShowUnassessed = false;
+  var swPriorityFlags = true;
   var showParcels = true;
   var pShowAssessed = true;
   var pShowUnassessed = true;
@@ -688,6 +733,27 @@
     });
   }
 
+  // Point halfway along a LineString by distance (not the middle vertex,
+  // which can sit far from the visual middle on unevenly split lines).
+  function lineMidpoint(coords) {
+    var total = 0, lens = [];
+    for (var i = 1; i < coords.length; i++) {
+      var dx = coords[i][0] - coords[i - 1][0], dy = coords[i][1] - coords[i - 1][1];
+      var d = Math.sqrt(dx * dx + dy * dy);
+      lens.push(d); total += d;
+    }
+    if (!total) return coords[coords.length - 1];
+    var half = total / 2, acc = 0;
+    for (var i = 1; i < coords.length; i++) {
+      if (acc + lens[i - 1] >= half) {
+        var t = lens[i - 1] ? (half - acc) / lens[i - 1] : 0;
+        return [coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * t, coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * t];
+      }
+      acc += lens[i - 1];
+    }
+    return coords[coords.length - 1];
+  }
+
   function renderLayer() {
     if (!map.getSource("parcels")) return; // map style not loaded yet; the load handler re-renders
     var feats = visibleFeatures().map(function (f) {
@@ -705,18 +771,33 @@
     // Sidewalk visibility is independent of parcel visibility.
     // Sidewalk checkboxes: Assessed / Not Assessed.
     if (map.getSource("segments")) {
-      var segFeats = (showSidewalks ? segments : [])
+      var visibleSegs = (showSidewalks ? segments : [])
         .filter(function (f) {
           var assessed = !!segAssessments[f.properties.id];
           if (assessed) return swShowAssessed;
           return swShowUnassessed;
-        })
+        });
+      var segFeats = visibleSegs
         .map(function (f) {
           var s = segmentStyleFor(f);
           var props = Object.assign({}, f.properties, { lineColor: s.color, lineWidth: s.width, dotted: (segAssessments[f.properties.id] && segAssessments[f.properties.id].condition === 0) ? 1 : 0 });
           return { type: "Feature", properties: props, geometry: f.geometry };
         });
       map.getSource("segments").setData({ type: "FeatureCollection", features: segFeats });
+      // Priority flags follow the same visibility as the lines: only
+      // segments currently shown can carry a flag, so unchecking
+      // Assessed hides their flags too.
+      if (map.getSource("priority-flags")) {
+        var flagFeats = visibleSegs
+          .filter(function (f) {
+            var a = segAssessments[f.properties.id];
+            return a && a.priority_fix && f.geometry && f.geometry.type === "LineString" && f.geometry.coordinates.length >= 2;
+          })
+          .map(function (f) {
+            return { type: "Feature", properties: { id: f.properties.id }, geometry: { type: "Point", coordinates: lineMidpoint(f.geometry.coordinates) } };
+          });
+        map.getSource("priority-flags").setData({ type: "FeatureCollection", features: flagFeats });
+      }
     }
     if (map.getLayer("parcels-fill")) {
       map.setLayoutProperty("parcels-fill", "visibility", showParcels ? "visible" : "none");
@@ -732,6 +813,9 @@
     }
     if (map.getLayer("segments-hit")) {
       map.setLayoutProperty("segments-hit", "visibility", showSidewalks ? "visible" : "none");
+    }
+    if (map.getLayer("priority-flags")) {
+      map.setLayoutProperty("priority-flags", "visibility", (showSidewalks && swPriorityFlags) ? "visible" : "none");
     }
     renderStats();
   }
@@ -1255,6 +1339,10 @@
   });
   document.getElementById("swUnassessed").addEventListener("change", function (e) {
     swShowUnassessed = e.target.checked;
+    renderLayer();
+  });
+  document.getElementById("swPriorityFlags").addEventListener("change", function (e) {
+    swPriorityFlags = e.target.checked;
     renderLayer();
   });
   // Parcel filter checkboxes

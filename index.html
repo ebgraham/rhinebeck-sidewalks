@@ -42,7 +42,7 @@
   #analyticsBtn { top: 12px; right: 104px; height: 38px; box-sizing: border-box; }
   #panel { width: 340px; border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; background: #fff; min-width: 0; transition: width .3s ease, opacity .25s ease, padding .3s ease; }
   #panel.hidden { display: none; }
-  #panel.collapsed { width: 0; padding: 0; opacity: 0; overflow: hidden; border-left-width: 0; }
+  #panel.collapsed { width: 0; padding: 0; opacity: 0; overflow: hidden; border-left-width: 0; transition: width .8s ease, opacity .25s ease, padding .8s ease; }
   #panelToggle { display: flex; align-items: center; justify-content: center; gap: 8px; }
   #panelToggle svg { flex: none; }
   #panelHeader { display: flex; gap: 8px; margin: 0 0 12px; align-items: stretch; }
@@ -155,7 +155,7 @@
     #main { flex-direction: column; }
     #mapWrap { flex: 1; min-height: 0; }
     #panel { width: 100%; max-height: 70vh; border-left: 0; border-top: 1px solid var(--line); transition: max-height .3s ease, opacity .25s ease, padding .3s ease; position: relative; }
-    #panel.collapsed { width: 100%; max-height: 0; padding: 0; opacity: 0; overflow: hidden; border-top-width: 0; }
+    #panel.collapsed { width: 100%; max-height: 0; padding: 0; opacity: 0; overflow: hidden; border-top-width: 0; transition: max-height .8s ease, opacity .25s ease, padding .8s ease; }
     #panelHeader { position: absolute; top: 12px; right: 12px; margin: 0; }
     #panelToggle { width: auto; padding: 6px 10px; font-size: 12px; }
     #backBtn { font-size: 12px; padding: 6px 10px; }
@@ -210,6 +210,9 @@
         <div class="checkRow">
           <label><input type="checkbox" id="swAssessed" checked> Assessed</label>
           <label><input type="checkbox" id="swUnassessed"> Not Assessed</label>
+        </div>
+        <div class="checkRow">
+          <label><input type="checkbox" id="swPriorityFlags" checked> Priority flags</label>
         </div>
       </div>
       <div class="settingsSection">
@@ -293,8 +296,8 @@
 <!-- Bump ?v= here and APP_VERSION in app.js on every app.js change so
      browsers fetch the new file instead of a cached one. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=98"></script>
-<script src="buildings.js?v=98"></script>
-<script src="app.js?v=98"></script>
+<script src="config.js?v=101"></script>
+<script src="buildings.js?v=101"></script>
+<script src="app.js?v=101"></script>
 </body>
 </html>
