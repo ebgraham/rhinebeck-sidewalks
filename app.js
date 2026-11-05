@@ -134,7 +134,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 101;
+  var APP_VERSION = 103;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -233,12 +233,12 @@
     fctx.strokeStyle = "#374151"; fctx.lineWidth = 3;
     fctx.beginPath(); fctx.moveTo(9, 44); fctx.lineTo(9, 8); fctx.stroke();
     fctx.beginPath();
-    fctx.moveTo(9, 8); fctx.lineTo(42, 8); fctx.lineTo(35, 16); fctx.lineTo(42, 24); fctx.lineTo(9, 24); fctx.closePath();
+    fctx.moveTo(9, 8); fctx.lineTo(32, 8); fctx.lineTo(26, 16); fctx.lineTo(32, 24); fctx.lineTo(9, 24); fctx.closePath();
     fctx.strokeStyle = "#fff"; fctx.lineWidth = 5; fctx.stroke();
     fctx.fillStyle = "#d73027"; fctx.fill();
     map.addImage("priority-flag", { width: 48, height: 48, data: fctx.getImageData(0, 0, 48, 48).data }, { pixelRatio: 2 });
     map.addSource("priority-flags", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-    var flagLayerSpec = { id: "priority-flags", type: "symbol", source: "priority-flags", layout: { visibility: "none", "icon-image": "priority-flag", "icon-size": 1.3, "icon-anchor": "bottom-left", "icon-allow-overlap": true, "icon-ignore-placement": true } };
+    var flagLayerSpec = { id: "priority-flags", type: "symbol", source: "priority-flags", layout: { visibility: "none", "icon-image": "priority-flag", "icon-size": 1.0, "icon-anchor": "bottom-left", "icon-allow-overlap": true, "icon-ignore-placement": true } };
     map.addLayer(flagLayerSpec);
     if (!map.getLayer("priority-flags")) map.addLayer(flagLayerSpec);
     map.on("mouseenter", "segments-hit", function () { map.getCanvas().style.cursor = "pointer"; });
