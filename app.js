@@ -134,7 +134,7 @@
 
   // Bump this (and the ?v= on the script tags in index.html) on every
   // app.js change so browsers fetch the new file instead of a cached one.
-  var APP_VERSION = 103;
+  var APP_VERSION = 105;
   var versionEl = document.getElementById("appVersion");
   if (versionEl) versionEl.textContent = "v" + APP_VERSION;
 
@@ -167,8 +167,8 @@
     if (condition === 0) return '<span class="' + cls + ' noSidewalk"></span>';
     return '<span class="' + cls + '" style="background:' + CONDITION_COLORS[condition] + '"></span>';
   }
-  var SURFACES = ["Bluestone", "Concrete", "Asphalt", "Stone Aggregate", "Gravel", "Other"];
-  var ISSUES = ["Lifted", "Cracked", "Worn", "Grass/Dirt", "Narrow", "Other"];
+  var SURFACES = ["Bluestone", "Concrete", "Asphalt", "Brick / Pavers", "Gravel", "Other"];
+  var ISSUES = ["Lifted", "Cracked", "Worn", "Grass / Dirt", "Narrow", "Other"];
 
   // MapLibre + OpenFreeMap vector tiles: the base map is vectors, so it
   // stays crisp at every zoom (no upscaled raster tiles), the Liberty style
